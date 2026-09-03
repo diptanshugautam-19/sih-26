@@ -1,0 +1,62 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Data and large files (as specified in project design)
+data/raw/*
+!data/raw/.gitkeep
+data/interim/*
+!data/interim/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/pcaps_sample/*
+!data/pcaps_sample/.gitkeep
+
+# Model weights
+models/checkpoints/*
+!models/checkpoints/.gitkeep
+*.pt
+*.pth
+*.onnx
+
+# Environment variables & local secrets
+.env
+.env.local
+
+# IDEs & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Reports & figures cache
+reports/figures/*
+!reports/figures/.gitkeep
