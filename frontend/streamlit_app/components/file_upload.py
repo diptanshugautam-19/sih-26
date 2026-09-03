@@ -4,9 +4,16 @@ Parses multi-GB captures or flow CSVs into a standardized DataFrame.
 """
 
 import os
+import sys
 import tempfile
+from pathlib import Path
 import pandas as pd
 from typing import Tuple, Optional
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from src.data.packet_features import parse_pcap_to_dataframe
 from src.data.clean_cicids import clean_dataframe
 
