@@ -1,0 +1,79 @@
+# ==============================================================================
+# Global Configuration — Predictive Cyber Defence World Model
+# ==============================================================================
+
+experiment:
+  name: "world_model_default"
+  seed: 42
+  device: "cuda"  # falls back to cpu if unavailable
+
+data:
+  # Windowing parameters (LOCKED DECISION)
+  window_size_seconds: 5.0      # 5 seconds fixed window
+  stride_seconds: 2.5           # 50% overlap for input sequence
+  sequence_length: 10           # 10 graphs per sequence (real span ~27.5s)
+  prediction_horizon_k: 4       # K=4 non-overlapping future windows
+
+  # Traps & Cleaning policies
+  strip_labels: true
+  handle_inf_as_nan: true
+  dedupe_keys:
+    - "src_ip"
+    - "src_port"
+    - "dst_ip"
+    - "dst_port"
+    - "protocol"
+    - "timestamp"
+  skip_empty_windows: true
+
+  # Paths
+  raw_dir: "data/raw"
+  interim_dir: "data/interim"
+  processed_dir: "data/processed"
+  pcaps_sample_dir: "data/pcaps_sample"
+
+graph:
+  node_feature_dim: 16
+  edge_feature_dim: 12
+  graph_embedding_dim: 64
+
+model:
+  gnn:
+    architecture: "GATConv"
+    num_layers: 2
+    heads: 4
+    hidden_dim: 64
+    dropout: 0.1
+    add_self_loops: true
+  temporal:
+    architecture: "TransformerEncoder"
+    num_layers: 3
+    nhead: 4
+    dim_feedforward: 256
+    dropout: 0.1
+  heads:
+    latent_dim: 64
+    reconstruction_dim: 64
+    num_classes_stage: 6  # Benign, Recon, Initial Access, Lateral Movement, C2, Exfiltration
+
+training:
+  batch_size: 16
+  learning_rate: 0.0005
+  weight_decay: 0.0001
+  num_epochs: 25
+  loss_weights:
+    reconstruction: 0.3    # next-state reconstruction loss
+    infiltration: 0.4      # BCE for infiltration probability
+    stage: 0.3             # Cross-Entropy for ATT&CK stage classification
+  early_stopping_patience: 5
+
+eval:
+  unseen_attack_holdouts:
+    - "DoS-Slowloris"
+    - "Botnet-ARES"
+  metrics:
+    - "f1"
+    - "precision"
+    - "recall"
+    - "fpr"
+    - "ood_divergence"
