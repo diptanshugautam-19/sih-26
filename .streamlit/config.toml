@@ -1,0 +1,7 @@
+[server]
+maxUploadSize = 10240  # 10 GB limit for large PCAP captures
+enableCORS = false
+enableXsrfProtection = false
+
+[browser]
+gatherUsageStats = false
