@@ -76,6 +76,19 @@ class CyberDefenceWorldModel(nn.Module):
             horizon_k=horizon_k,
         )
 
+    def forward(
+        self,
+        graph_sequence: List[NetworkGraphSnapshot],
+        action_mask_nodes: torch.Tensor | None = None,
+        action_mask_edges: torch.Tensor | None = None,
+    ) -> Dict[str, Any]:
+        """Standard PyTorch forward entrypoint delegating to forward_sequence."""
+        return self.forward_sequence(
+            graph_sequence=graph_sequence,
+            action_mask_nodes=action_mask_nodes,
+            action_mask_edges=action_mask_edges,
+        )
+
     def forward_sequence(
         self,
         graph_sequence: List[NetworkGraphSnapshot],
@@ -95,18 +108,22 @@ class CyberDefenceWorldModel(nn.Module):
         max_nodes = max(snap.num_nodes for snap in graph_sequence)
         node_memory = torch.zeros((max_nodes, self.memory_dim), device=device)
 
+        if action_mask_nodes is not None and len(action_mask_nodes) < max_nodes:
+            mask_pad = torch.ones(max_nodes - len(action_mask_nodes), device=device, dtype=action_mask_nodes.dtype)
+            action_mask_nodes = torch.cat([action_mask_nodes, mask_pad], dim=0)
+
         graph_embeddings = []
         spatial_attentions = []
         last_node_latents = None
 
         for snap in graph_sequence:
-            snap_nodes = snap.x.size(0)
-
-            # Auto-expand x and memory to max_nodes if this snapshot is smaller.
-            # New (unseen-so-far) nodes get zero features + zero memory.
-            if snap_nodes < max_nodes:
-                pad_x = torch.zeros(max_nodes - snap_nodes, snap.x.size(1), device=device)
-                x_padded = torch.cat([snap.x, pad_x], dim=0)
+            # Pad node features if this snapshot has fewer nodes than max_nodes
+            # (can happen because new nodes appear in later windows)
+            cur_nodes = snap.num_nodes
+            if cur_nodes < max_nodes:
+                pad = torch.zeros((max_nodes - cur_nodes, snap.x.size(1)),
+                                  dtype=snap.x.dtype, device=device)
+                x_padded = torch.cat([snap.x, pad], dim=0)
             else:
                 x_padded = snap.x
 
@@ -146,11 +163,12 @@ class CyberDefenceWorldModel(nn.Module):
         Counterfactual "What-If" simulation:
         Zeroes out node/port features and recalculates predicted trajectory in <30ms.
         """
-        num_nodes = graph_sequence[0].num_nodes
+        assert len(graph_sequence) > 0, "Graph sequence must contain at least 1 snapshot."
+        max_nodes = max(snap.num_nodes for snap in graph_sequence)
         device = graph_sequence[0].x.device
 
-        action_mask_nodes = torch.ones(num_nodes, device=device)
-        if isolated_host_id is not None and 0 <= isolated_host_id < num_nodes:
+        action_mask_nodes = torch.ones(max_nodes, device=device)
+        if isolated_host_id is not None and 0 <= isolated_host_id < max_nodes:
             action_mask_nodes[isolated_host_id] = 0.0
 
         # Run forward pass with action mask
