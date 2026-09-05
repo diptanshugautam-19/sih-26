@@ -70,13 +70,17 @@ class CausalTemporalTransformer(nn.Module):
         if is_single:
             graph_seq = graph_seq.unsqueeze(0)
 
-        # Safeguard against dimension mismatch (e.g. 2x out_dim from mean+max pooling without pre-projection)
+        # Safeguard: GNN encoder must output exactly embed_dim.
+        # The runtime auto-projection trick that was here before was NOT registered
+        # in nn.Module, so it never appeared in state_dict and was silently re-randomised
+        # on every checkpoint load. Enforce the contract with a hard assert instead.
         if graph_seq.size(-1) != self.embed_dim:
-            if not hasattr(self, "_auto_in_proj") or self._auto_in_proj.in_features != graph_seq.size(-1):
-                self._auto_in_proj = nn.Linear(graph_seq.size(-1), self.embed_dim).to(graph_seq.device)
-            graph_seq = self._auto_in_proj(graph_seq)
-        else:
-            graph_seq = self.in_proj(graph_seq)
+            raise ValueError(
+                f"Expected graph embeddings of dim {self.embed_dim}, "
+                f"got {graph_seq.size(-1)}. Ensure GNNEncoder/DynamicGATWithMemory "
+                f"uses project_pooling=True and out_dim={self.embed_dim}."
+            )
+        graph_seq = self.in_proj(graph_seq)  # Identity when dims match
 
         batch_size, seq_len, _ = graph_seq.shape
         pos = self.pos_embedding[:, :seq_len, :]

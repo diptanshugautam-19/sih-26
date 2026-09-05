@@ -26,16 +26,21 @@ from sklearn.metrics import (
 )
 
 
+# Feature names must match the columns produced by src/data/flow_features.py.
+# The original list (payload_size, flag_syn, ...) did not exist in flow_features output,
+# so _extract_features silently returned an empty matrix and the baseline trained on
+# zero features — producing meaningless metrics.
 FLOW_FEATURES = [
-    "payload_size",       # bytes per packet/flow
-    "flag_syn",           # SYN flag ratio / presence
-    "flag_ack",           # ACK flag
-    "flag_rst",           # RST flag (connection reset)
-    "flag_fin",           # FIN flag
-    "ttl",                # IP Time-To-Live
-    "tcp_window",         # TCP window size
-    "is_retransmission",  # retransmission flag (derived)
-    "flow_ttl_variance",  # per-flow TTL variance (derived)
+    "bytes_fwd",        # total forward bytes
+    "bytes_bwd",        # total backward bytes
+    "pkt_size_mean",    # mean packet size
+    "pkt_size_std",     # stddev packet size
+    "iat_mean_ms",      # mean inter-arrival time (ms)
+    "iat_std_ms",       # stddev inter-arrival time
+    "syn_ratio",        # SYN packet fraction
+    "fin_ratio",        # FIN packet fraction
+    "port_entropy",     # entropy over destination ports
+    "log_bytes_total",  # log(1 + total bytes)
 ]
 
 

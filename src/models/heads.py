@@ -24,6 +24,7 @@ class MultiTaskWorldModelHeads(nn.Module):
     ):
         super().__init__()
         self.horizon_k = horizon_k
+        self.telemetry_dim = telemetry_dim   # stored so view() uses it, not a hardcoded literal
 
         # Head 1: Grounded Next-State Dynamics Prediction (K future steps)
         self.grounded_head = nn.Sequential(
@@ -80,7 +81,7 @@ class MultiTaskWorldModelHeads(nn.Module):
 
         # 1. Grounded dynamics
         grounded_flat = self.grounded_head(summary_latent)
-        grounded_pred = grounded_flat.view(batch_size, self.horizon_k, 3)
+        grounded_pred = grounded_flat.view(batch_size, self.horizon_k, self.telemetry_dim)
 
         # 2. Infiltration prob
         infil_prob = self.infiltration_head(summary_latent)

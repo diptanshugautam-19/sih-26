@@ -36,7 +36,7 @@ class GNNEncoder(nn.Module):
     def __init__(
         self,
         node_in_dim: int = 16,
-        edge_in_dim: int = 16,
+        edge_in_dim: int = 12,          # graph_builder.py produces 12 edge features
         hidden_dim: int = 64,
         out_dim: int = 64,
         num_heads: int = 4,
@@ -119,9 +119,15 @@ class GNNEncoder(nn.Module):
         k = (self.k_proj(h_node[src_nodes]) + h_edge).view(num_edges, self.num_heads, self.head_dim)
         v = (self.v_proj(h_node[src_nodes]) + h_edge).view(num_edges, self.num_heads, self.head_dim)
 
-        scores = (q * k).sum(dim=-1) / math.sqrt(self.head_dim)
-        attn_weights = torch.sigmoid(scores)
-        mean_attn_per_edge = attn_weights.mean(dim=-1)
+        scores = (q * k).sum(dim=-1) / math.sqrt(self.head_dim)       # [E, H]
+
+        # Scatter softmax: attention sums to 1 over each destination node's in-edges.
+        # sigmoid would let messages accumulate unboundedly on high-degree nodes.
+        exp_scores = torch.exp(scores - scores.max())                  # stability shift
+        denom = torch.zeros(num_nodes, self.num_heads, device=x.device)
+        denom.index_add_(0, dst_nodes, exp_scores)
+        attn_weights = exp_scores / (denom[dst_nodes] + 1e-16)         # [E, H]
+        mean_attn_per_edge = attn_weights.mean(dim=-1)                 # [E] for explainability
 
         messages = (v * attn_weights.unsqueeze(-1)).view(num_edges, self.hidden_dim)
         aggregated = torch.zeros((num_nodes, self.hidden_dim), device=x.device)

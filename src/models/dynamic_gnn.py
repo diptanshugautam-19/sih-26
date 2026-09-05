@@ -100,13 +100,13 @@ class DynamicGATWithMemory(nn.Module):
         h_node = F.relu(self.node_proj(node_input))
 
         if num_edges == 0:
-            # Degenerate case: isolated nodes only
+            # Degenerate case: isolated nodes only — no aggregation happened,
+            # so do NOT update memory (would inject ghost drift).
             mean_p = h_node.mean(dim=0)
             max_p = h_node.max(dim=0)[0]
             pooled = self.pool_proj(torch.cat([mean_p, max_p], dim=-1))
-            new_memory = self.memory_gru(h_node, node_memory)
             dummy_attn = torch.empty(0, device=x.device)
-            return h_node, pooled, new_memory, dummy_attn
+            return h_node, pooled, node_memory, dummy_attn  # memory unchanged
 
         # Counterfactual intervention: mask blocked edges (e.g. blocked ports)
         if action_mask_edges is not None:
@@ -123,9 +123,15 @@ class DynamicGATWithMemory(nn.Module):
         v = (self.v_proj(h_node[src_nodes]) + h_edge).view(num_edges, self.num_heads, self.head_dim)
 
         # Scaled dot-product attention
-        scores = (q * k).sum(dim=-1) / math.sqrt(self.head_dim)            # [num_edges, num_heads]
-        attn_weights = torch.sigmoid(scores)                               # [num_edges, num_heads]
-        mean_attn_per_edge = attn_weights.mean(dim=-1)                     # [num_edges] for explainability
+        scores = (q * k).sum(dim=-1) / math.sqrt(self.head_dim)            # [E, H]
+
+        # Scatter softmax: normalise over each destination node's in-edges.
+        # sigmoid would let aggregated messages grow unboundedly on high-degree nodes.
+        exp_scores = torch.exp(scores - scores.max())                      # stability shift
+        denom = torch.zeros(num_nodes, self.num_heads, device=x.device)
+        denom.index_add_(0, dst_nodes, exp_scores)
+        attn_weights = exp_scores / (denom[dst_nodes] + 1e-16)             # [E, H]
+        mean_attn_per_edge = attn_weights.mean(dim=-1)                     # [E] for explainability
 
         # Weighted message aggregation to destination nodes
         messages = (v * attn_weights.unsqueeze(-1)).view(num_edges, self.hidden_dim)

@@ -117,9 +117,19 @@ class CyberDefenceWorldModel(nn.Module):
         last_node_latents = None
 
         for snap in graph_sequence:
+            # Sanity check: edge_index must only reference nodes within this snapshot.
+            # If edge_index.max() >= cur_nodes the scatter in DynamicGATWithMemory would
+            # silently write into padded-zero rows, corrupting the graph embedding.
+            cur_nodes = snap.num_nodes
+            if snap.edge_index.numel() > 0:
+                assert snap.edge_index.max() < cur_nodes, (
+                    f"edge_index references node {snap.edge_index.max().item()} "
+                    f"but snapshot only has {cur_nodes} nodes. "
+                    "Check graph_builder window-scoped registry."
+                )
+
             # Pad node features if this snapshot has fewer nodes than max_nodes
             # (can happen because new nodes appear in later windows)
-            cur_nodes = snap.num_nodes
             if cur_nodes < max_nodes:
                 pad = torch.zeros((max_nodes - cur_nodes, snap.x.size(1)),
                                   dtype=snap.x.dtype, device=device)

@@ -30,7 +30,7 @@ class GNNOnlyBaseline(nn.Module):
     def __init__(
         self,
         node_in_dim: int = 16,
-        edge_in_dim: int = 16,
+        edge_in_dim: int = 12,          # graph_builder.py produces 12 edge features
         hidden_dim: int = 64,
         num_classes_stage: int = 7,
         num_heads: int = 4,
