@@ -63,6 +63,26 @@ def _compute_entropy(values: pd.Series | np.ndarray) -> float:
     return float(-np.sum(val_counts * np.log2(val_counts + 1e-12)))
 
 
+def _is_private_ip(ip_str: str) -> float:
+    """RFC 1918 private IPv4 detection (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8)."""
+    if ip_str.startswith(("10.", "192.168.", "127.")):
+        return 1.0
+    if ip_str.startswith("172."):
+        parts = ip_str.split(".")
+        if len(parts) > 1 and parts[1].isdigit() and 16 <= int(parts[1]) <= 31:
+            return 1.0
+    return 0.0
+
+
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """Coerce value to float and replace NaN/inf with default."""
+    try:
+        f = float(val)
+        return default if (math.isnan(f) or math.isinf(f)) else f
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass
 class NetworkGraphSnapshot:
     """Structured container for a single time window's graph representation."""
@@ -117,9 +137,9 @@ def build_graph_for_window(
     dst_indices = []
     edge_features_list = []
 
-    total_syn_count = 0
-    total_ack_count = 0
-    total_bytes_window = 0
+    total_syn_count = 0.0
+    total_ack_count = 0.0
+    total_bytes_window = 0.0
 
     for (s_ip, d_ip), edge_rows in grouped_edges:
         s_idx = registry.ip_to_id[str(s_ip)]
@@ -129,20 +149,26 @@ def build_graph_for_window(
 
         # Edge aggregation statistics
         n_pkts = len(edge_rows)
-        bytes_sum = float(edge_rows["payload_size"].sum() if "payload_size" in edge_rows else n_pkts * 64)
+        bytes_sum = _safe_float(edge_rows["payload_size"].sum() if "payload_size" in edge_rows else n_pkts * 64)
         total_bytes_window += bytes_sum
 
-        syn_flags = float(edge_rows["flag_syn"].sum() if "flag_syn" in edge_rows else 0)
-        ack_flags = float(edge_rows["flag_ack"].sum() if "flag_ack" in edge_rows else 0)
-        rst_flags = float(edge_rows["flag_rst"].sum() if "flag_rst" in edge_rows else 0)
-        fin_flags = float(edge_rows["flag_fin"].sum() if "flag_fin" in edge_rows else 0)
+        syn_flags = _safe_float(edge_rows["flag_syn"].sum() if "flag_syn" in edge_rows else 0.0)
+        ack_flags = _safe_float(edge_rows["flag_ack"].sum() if "flag_ack" in edge_rows else 0.0)
+        rst_flags = _safe_float(edge_rows["flag_rst"].sum() if "flag_rst" in edge_rows else 0.0)
+        fin_flags = _safe_float(edge_rows["flag_fin"].sum() if "flag_fin" in edge_rows else 0.0)
 
         total_syn_count += syn_flags
         total_ack_count += ack_flags
 
-        retrans = float(edge_rows["is_retransmission"].sum() if "is_retransmission" in edge_rows else 0)
+        retrans = _safe_float(edge_rows["is_retransmission"].sum() if "is_retransmission" in edge_rows else 0.0)
 
-        # Edge feature vector (12 dimensions)
+        dst_ports_unique = float(edge_rows["dst_port"].nunique()) if "dst_port" in edge_rows else 1.0
+        ttl_mean = _safe_float(edge_rows["ttl"].mean(), 64.0) if "ttl" in edge_rows else 64.0
+        ttl_std = _safe_float(edge_rows["ttl"].std(), 0.0) if "ttl" in edge_rows and len(edge_rows) > 1 else 0.0
+        win_mean = _safe_float(edge_rows["tcp_window"].mean(), 1024.0) if "tcp_window" in edge_rows else 1024.0
+        is_internal = _is_private_ip(str(s_ip))
+
+        # Edge feature vector (12 dimensions) - zero NaNs guaranteed
         feat = [
             math.log1p(n_pkts),                               # 0: log packet count
             math.log1p(bytes_sum),                            # 1: log byte volume
@@ -151,11 +177,11 @@ def build_graph_for_window(
             rst_flags / max(n_pkts, 1),                       # 4: rst ratio
             fin_flags / max(n_pkts, 1),                       # 5: fin ratio
             retrans / max(n_pkts, 1),                         # 6: retransmission rate
-            float(edge_rows["dst_port"].nunique() if "dst_port" in edge_rows else 1), # 7: unique dst ports
-            float(edge_rows["ttl"].mean() if "ttl" in edge_rows else 64.0),           # 8: mean ttl
-            float(edge_rows["ttl"].std() if "ttl" in edge_rows and len(edge_rows) > 1 else 0.0), # 9: ttl std
-            float(edge_rows["tcp_window"].mean() if "tcp_window" in edge_rows else 1024.0),     # 10: mean win
-            1.0 if (s_ip.startswith("10.") or s_ip.startswith("192.168.")) else 0.0,           # 11: internal
+            dst_ports_unique,                                 # 7: unique dst ports
+            ttl_mean,                                         # 8: mean ttl
+            ttl_std,                                          # 9: ttl std
+            win_mean,                                         # 10: mean win
+            is_internal,                                      # 11: internal private IP flag
         ]
         edge_features_list.append(feat)
 
@@ -200,25 +226,25 @@ def build_graph_for_window(
     for ip_str, ip_id in registry.ip_to_id.items():
         out_deg = float(src_counts.get(ip_str, 0))
         in_deg  = float(dst_counts.get(ip_str, 0))
-        port_ent = float(port_entropy_per_src.get(ip_str, 0.0))
+        port_ent = _safe_float(port_entropy_per_src.get(ip_str, 0.0), 0.0)
 
         # TTL: prefer src stats, fall back to dst
         if ip_str in ttl_src.index:
-            ttl_mean = float(ttl_src.at[ip_str, "mean"])
-            ttl_var  = float(ttl_src.at[ip_str, "var"] or 0.0)
+            ttl_mean = _safe_float(ttl_src.at[ip_str, "mean"], 64.0)
+            ttl_var  = _safe_float(ttl_src.at[ip_str, "var"], 0.0)
         elif ip_str in ttl_dst.index:
-            ttl_mean = float(ttl_dst.at[ip_str, "mean"])
-            ttl_var  = float(ttl_dst.at[ip_str, "var"] or 0.0)
+            ttl_mean = _safe_float(ttl_dst.at[ip_str, "mean"], 64.0)
+            ttl_var  = _safe_float(ttl_dst.at[ip_str, "var"], 0.0)
         else:
             ttl_mean, ttl_var = 64.0, 0.0
 
-        is_priv = 1.0 if (ip_str.startswith("10.") or ip_str.startswith("192.168.") or ip_str.startswith("172.16.")) else 0.0
+        is_priv = _is_private_ip(ip_str)
 
         node_features[ip_id, 0] = math.log1p(out_deg)       # 0: log out-degree
         node_features[ip_id, 1] = math.log1p(in_deg)        # 1: log in-degree
         node_features[ip_id, 2] = port_ent                  # 2: dst port entropy
         node_features[ip_id, 3] = ttl_mean / 255.0          # 3: normalised TTL
-        node_features[ip_id, 4] = math.log1p(ttl_var)       # 4: TTL variance
+        node_features[ip_id, 4] = math.log1p(max(ttl_var, 0.0))  # 4: TTL variance
         node_features[ip_id, 5] = is_priv                   # 5: private network flag
         # Dimensions 6-15: reserved for dynamic GRU node memory bank
 
@@ -227,9 +253,9 @@ def build_graph_for_window(
     # 4. Compute Grounded Telemetry Target for this snapshot
     # [overall_port_entropy, overall_syn_ratio, log_total_bytes]
     all_ports = window_df["dst_port"] if "dst_port" in window_df else pd.Series()
-    win_entropy = _compute_entropy(all_ports)
-    win_syn_ratio = total_syn_count / max(total_syn_count + total_ack_count, 1.0)
-    win_log_bytes = math.log1p(total_bytes_window)
+    win_entropy = _safe_float(_compute_entropy(all_ports), 0.0)
+    win_syn_ratio = _safe_float(total_syn_count / max(total_syn_count + total_ack_count, 1.0), 0.0)
+    win_log_bytes = math.log1p(max(total_bytes_window, 0.0))
 
     grounded_target = torch.tensor([win_entropy, win_syn_ratio, win_log_bytes], dtype=torch.float32)
 

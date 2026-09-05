@@ -123,19 +123,17 @@ class CyberDefenceDataset(Dataset):
         input_windows = make_input_windows(t_min, t_max, self.cfg)
         n_windows = len(input_windows)
 
-        # 2. Vectorized window assignment — stamp each row with its window_id
-        #    floor((timestamp - t_min) / stride) gives the primary window index.
-        stride = self.cfg.stride
-        ts_arr = df["timestamp"].values
-        win_ids_arr = np.floor((ts_arr - t_min) / stride).astype(np.int64)
-        win_ids_arr = np.clip(win_ids_arr, 0, n_windows - 1)
-        df = df.copy()
-        df["_win_id"] = win_ids_arr
+        # 2. Assign rows to all overlapping windows they belong to
+        #    (stride=2.5s < window_size=5.0s means each packet belongs to multiple overlapping windows)
+        assignment = assign_rows_to_windows(df["timestamp"], t_min, self.cfg, n_windows)
 
         # 3. Pre-group rows by window id for O(1) lookups
+        #    Join assignment back to df on row_index
         win_groups: Dict[int, pd.DataFrame] = {}
-        for wid, grp in df.groupby("_win_id"):
-            win_groups[int(wid)] = grp
+        if not assignment.empty:
+            df_with_pos = df.reset_index(drop=True)
+            for wid, grp_assign in assignment.groupby("window_id"):
+                win_groups[int(wid)] = df_with_pos.iloc[grp_assign["row_index"].to_numpy()]
 
         # 4. Per-window: build graph snapshots
         graphs: Dict[int, Optional[NetworkGraphSnapshot]] = {}
