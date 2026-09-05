@@ -57,8 +57,9 @@ class UncertaintyWeightedMultiTaskLoss(nn.Module):
         pred = pred.float().squeeze(-1)
         target = target.float()
 
-        # Label smoothing
-        target_smooth = target * (1 - self.label_smoothing) + 0.5 * self.label_smoothing
+        # Standard binary label smoothing: push positives down to (1-ε), push negatives up to ε.
+        # Original formula used 0.5*ε which over-smoothed negatives asymmetrically.
+        target_smooth = target * (1 - self.label_smoothing) + (1 - target) * self.label_smoothing
 
         bce = F.binary_cross_entropy(pred.clamp(eps, 1 - eps), target_smooth, reduction="none")
         pt = torch.where(target >= 0.5, pred, 1 - pred)

@@ -30,23 +30,27 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from sklearn.metrics import f1_score
 
 from src.models.worldmodel import CyberDefenceWorldModel
 from src.training.losses import UncertaintyWeightedMultiTaskLoss
 from src.data.dataset import CyberDefenceDataset, make_dataloaders, collate_sequences
+from src.training.seed import set_seed          # canonical location
 
 logger = logging.getLogger(__name__)
 
 
-def set_seed(seed: int = 42) -> None:
-    """Reproducibility: seed Python, NumPy, PyTorch, and cuDNN."""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+# set_seed is defined in src/training/seed.py and re-imported above.
+# Kept as a local passthrough so callers using `from src.training.train import set_seed` still work.
+
+
+
+def _snap_to_device(snap, device: torch.device):
+    """Move NetworkGraphSnapshot tensor fields to the target device in-place-safe way."""
+    snap.x          = snap.x.to(device)
+    snap.edge_index = snap.edge_index.to(device)
+    snap.edge_attr  = snap.edge_attr.to(device)
+    return snap
 
 
 def _forward_batch(
@@ -64,7 +68,11 @@ def _forward_batch(
     }
 
     for sample in batch["samples"]:
-        preds = model.forward_sequence(sample.graph_sequence)
+        # Move every snapshot's tensors to device before the forward pass.
+        # Without this, GPU training crashes with a device-mismatch error inside
+        # DynamicGATWithMemory because targets are on CUDA but graph tensors are on CPU.
+        graph_seq = [_snap_to_device(s, device) for s in sample.graph_sequence]
+        preds = model.forward_sequence(graph_seq)
         all_preds["grounded"].append(preds["grounded_telemetry"])
         all_preds["infiltration"].append(preds["infiltration_prob"])
         all_preds["stage_logits"].append(preds["stage_logits"])
@@ -258,19 +266,23 @@ def train(
         elapsed = time.time() - t0
         val_loss = val_losses["loss_total"]
 
-        # Quick accuracy
+        # Infiltration F1 on validation set.
+        # Raw accuracy is misleading on CIC-IDS2018 (~80% benign) — a model that
+        # always predicts Benign achieves 80% accuracy while catching 0 attacks.
         if len(val_raw["infil_targets"]) > 0:
-            val_infil_acc = float(
-                ((val_raw["infil_preds"] > 0.5) == (val_raw["infil_targets"] > 0.5)).mean()
-            )
+            val_infil_f1 = float(f1_score(
+                (val_raw["infil_targets"] > 0.5).astype(int),
+                (val_raw["infil_preds"]   > 0.5).astype(int),
+                zero_division=0,
+            ))
         else:
-            val_infil_acc = 0.0
+            val_infil_f1 = 0.0
 
         row = {
             "epoch": epoch,
             **{f"train_{k}": v for k, v in train_losses.items()},
             **{f"val_{k}": v for k, v in val_losses.items()},
-            "val_infil_acc": val_infil_acc,
+            "val_infil_f1": val_infil_f1,
             "lr": scheduler.get_last_lr()[0],
             "elapsed_s": elapsed,
         }
@@ -280,7 +292,7 @@ def train(
             f"Epoch {epoch:03d}/{num_epochs:03d} | "
             f"Train Loss: {train_losses['loss_total']:.4f} | "
             f"Val Loss: {val_loss:.4f} | "
-            f"Val Infil Acc: {val_infil_acc:.3f} | "
+            f"Val Infil F1: {val_infil_f1:.3f} | "
             f"LR: {scheduler.get_last_lr()[0]:.2e} | "
             f"Time: {elapsed:.1f}s"
         )
@@ -309,7 +321,9 @@ def train(
 
     # Load best model before returning
     if best_ckpt_path.exists():
-        model.load_state_dict(torch.load(best_ckpt_path, map_location=device))
+        # weights_only=True required for PyTorch >=2.0 to avoid FutureWarning and
+        # >=2.6 hard error; also prevents arbitrary code execution from pickled objects.
+        model.load_state_dict(torch.load(best_ckpt_path, map_location=device, weights_only=True))
         print(f"\n  [OK] Best model loaded from {best_ckpt_path}")
 
     # Run final test evaluation
