@@ -1,14 +1,14 @@
 import unittest
 import pandas as pd
 import numpy as np
-from src.data.windowing import slice_into_windows, create_sequences_and_targets
+from src.data.windowing import WindowConfig, make_input_windows, assign_rows_to_windows, build_sequences
 
 
 class TestWindowing(unittest.TestCase):
     def setUp(self):
         # Generate 100 seconds of synthetic network flows
-        base_time = pd.Timestamp("2026-09-04 10:00:00")
-        timestamps = [base_time + pd.Timedelta(seconds=i * 0.5) for i in range(200)]
+        base_time = pd.Timestamp("2026-09-04 10:00:00").timestamp()
+        timestamps = [base_time + i * 0.5 for i in range(200)]
         labels = ["Benign"] * 160 + ["DoS attacks-Slowloris"] * 40
 
         self.df = pd.DataFrame({
@@ -20,27 +20,33 @@ class TestWindowing(unittest.TestCase):
             "protocol": [6] * 200,
             "label": labels
         })
+        self.cfg = WindowConfig(window_size=5.0, stride=2.5, seq_len=10, horizon_k=4)
 
     def test_windowing_stride_and_overlap(self):
-        windows = slice_into_windows(self.df, window_size_sec=5.0, stride_sec=2.5, skip_empty=False)
-        self.assertGreater(len(windows), 10)
+        t_min = float(self.df["timestamp"].min())
+        t_max = float(self.df["timestamp"].max())
+        input_windows = make_input_windows(t_min, t_max, self.cfg)
+        self.assertGreater(len(input_windows), 10)
 
-        # First window: 10:00:00 to 10:00:05
-        # Second window: 10:00:02.5 to 10:00:07.5
-        w0 = windows[0]
-        w1 = windows[1]
-        self.assertEqual(w0["end_time"] - w0["start_time"], pd.Timedelta(seconds=5.0))
-        self.assertEqual(w1["start_time"] - w0["start_time"], pd.Timedelta(seconds=2.5))
+        # Window 0 vs Window 1
+        w0_start = input_windows.loc[0, "start"]
+        w0_end = input_windows.loc[0, "end"]
+        w1_start = input_windows.loc[1, "start"]
+        self.assertAlmostEqual(w0_end - w0_start, 5.0)
+        self.assertAlmostEqual(w1_start - w0_start, 2.5)
 
     def test_no_target_leakage(self):
         """CRITICAL: Target window MUST NOT overlap with the last input window."""
-        windows = slice_into_windows(self.df, window_size_sec=5.0, stride_sec=2.5)
-        samples = create_sequences_and_targets(windows, seq_len=10, k_horizon=4, window_size_sec=5.0)
+        t_min = float(self.df["timestamp"].min())
+        t_max = float(self.df["timestamp"].max())
+        input_windows = make_input_windows(t_min, t_max, self.cfg)
+        sequences = build_sequences(input_windows, self.cfg)
 
-        self.assertGreater(len(samples), 0)
-        for s in samples:
-            last_input_end = s["last_input_end"]
-            first_target_start = s["first_target_start"]
+        self.assertGreater(len(sequences), 0)
+        for s in sequences:
+            last_input_end = s["input_end"]
+            target_windows = s["target_windows"]
+            first_target_start = float(target_windows.loc[0, "start"])
 
             # Target start time must be >= last input end time
             self.assertGreaterEqual(

@@ -513,15 +513,32 @@ def add_flow_level_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
+    df = df.copy()
+
+    # If flow_key is missing, construct from available 5-tuple columns
+    if "flow_key" not in df.columns:
+        src = df["src_ip"].astype(str) if "src_ip" in df.columns else (df["Src IP"].astype(str) if "Src IP" in df.columns else "0.0.0.0")
+        dst = df["dst_ip"].astype(str) if "dst_ip" in df.columns else (df["Dst IP"].astype(str) if "Dst IP" in df.columns else "0.0.0.0")
+        sport = df["src_port"].astype(str) if "src_port" in df.columns else (df["Src Port"].astype(str) if "Src Port" in df.columns else "0")
+        dport = df["dst_port"].astype(str) if "dst_port" in df.columns else (df["Dst Port"].astype(str) if "Dst Port" in df.columns else "0")
+        proto = df["protocol"].astype(str) if "protocol" in df.columns else (df["Protocol"].astype(str) if "Protocol" in df.columns else "6")
+        df["flow_key"] = src + ":" + sport + "->" + dst + ":" + dport + "/" + proto
+
     grp = df.groupby("flow_key")
 
-    ttl_var = grp["ttl"].transform(lambda s: s.var(ddof=0) if len(s) > 1 else 0.0)
-    df["flow_ttl_variance"] = ttl_var.fillna(0.0)
+    if "ttl" in df.columns:
+        ttl_var = grp["ttl"].transform(lambda s: s.var(ddof=0) if len(s) > 1 else 0.0)
+        df["flow_ttl_variance"] = ttl_var.fillna(0.0)
+    elif "flow_ttl_variance" not in df.columns:
+        df["flow_ttl_variance"] = 0.0
 
     # Retransmission heuristic: same flow_key + same tcp_seq appearing >1x
-    df["is_retransmission"] = (
-        df.groupby(["flow_key", "tcp_seq"])["tcp_seq"].transform("count") > 1
-    ) & df["tcp_seq"].notna()
+    if "tcp_seq" in df.columns:
+        df["is_retransmission"] = (
+            df.groupby(["flow_key", "tcp_seq"])["tcp_seq"].transform("count") > 1
+        ) & df["tcp_seq"].notna()
+    elif "is_retransmission" not in df.columns:
+        df["is_retransmission"] = False
 
     return df
 
