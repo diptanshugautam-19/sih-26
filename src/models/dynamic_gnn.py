@@ -74,6 +74,10 @@ class DynamicGATWithMemory(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.layer_norm = nn.LayerNorm(hidden_dim)
 
+        # Graph pooling projection: combines mean + max pooling (2 x hidden_dim -> hidden_dim)
+        # Prevents dimension mismatch when feeding temporal transformer
+        self.pool_proj = nn.Linear(2 * hidden_dim, hidden_dim)
+
     def forward(
         self,
         x: torch.Tensor,
@@ -97,7 +101,9 @@ class DynamicGATWithMemory(nn.Module):
 
         if num_edges == 0:
             # Degenerate case: isolated nodes only
-            pooled = h_node.mean(dim=0)
+            mean_p = h_node.mean(dim=0)
+            max_p = h_node.max(dim=0)[0]
+            pooled = self.pool_proj(torch.cat([mean_p, max_p], dim=-1))
             new_memory = self.memory_gru(h_node, node_memory)
             dummy_attn = torch.empty(0, device=x.device)
             return h_node, pooled, new_memory, dummy_attn
@@ -132,7 +138,9 @@ class DynamicGATWithMemory(nn.Module):
         # 4. TGN Node Memory Update
         updated_memory = self.memory_gru(h_out, node_memory)
 
-        # 5. Graph-level pooled embedding
-        pooled_graph = h_out.mean(dim=0)
+        # 5. Graph-level pooled embedding: mean + max pooling concatenated, projected to hidden_dim
+        mean_pool = h_out.mean(dim=0)
+        max_pool = h_out.max(dim=0)[0]
+        pooled_graph = self.pool_proj(torch.cat([mean_pool, max_pool], dim=-1))
 
         return h_out, pooled_graph, updated_memory, mean_attn_per_edge

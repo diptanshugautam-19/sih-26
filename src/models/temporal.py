@@ -22,6 +22,7 @@ class CausalTemporalTransformer(nn.Module):
     def __init__(
         self,
         embed_dim: int = 64,
+        in_dim: int | None = None,
         num_layers: int = 3,
         num_heads: int = 4,
         ff_dim: int = 256,
@@ -30,6 +31,14 @@ class CausalTemporalTransformer(nn.Module):
     ):
         super().__init__()
         self.embed_dim = embed_dim
+        actual_in_dim = in_dim if in_dim is not None else embed_dim
+
+        # Input projection layer: projects from in_dim (e.g. 2 x hidden_dim = 128 from mean+max pooling)
+        # down to transformer embed_dim (64)
+        if actual_in_dim != embed_dim:
+            self.in_proj = nn.Linear(actual_in_dim, embed_dim)
+        else:
+            self.in_proj = nn.Identity()
 
         # Learnable / Sinusoidal positional embeddings
         self.pos_embedding = nn.Parameter(torch.randn(1, max_seq_len, embed_dim) * 0.02)
@@ -53,13 +62,21 @@ class CausalTemporalTransformer(nn.Module):
     def forward(self, graph_seq: torch.Tensor) -> torch.Tensor:
         """
         Inputs:
-            graph_seq: [batch_size, seq_len, embed_dim] or [seq_len, embed_dim]
+            graph_seq: [batch_size, seq_len, in_dim] or [seq_len, in_dim]
         Outputs:
             temporal_latents: [batch_size, seq_len, embed_dim]
         """
         is_single = (graph_seq.dim() == 2)
         if is_single:
             graph_seq = graph_seq.unsqueeze(0)
+
+        # Safeguard against dimension mismatch (e.g. 2x out_dim from mean+max pooling without pre-projection)
+        if graph_seq.size(-1) != self.embed_dim:
+            if not hasattr(self, "_auto_in_proj") or self._auto_in_proj.in_features != graph_seq.size(-1):
+                self._auto_in_proj = nn.Linear(graph_seq.size(-1), self.embed_dim).to(graph_seq.device)
+            graph_seq = self._auto_in_proj(graph_seq)
+        else:
+            graph_seq = self.in_proj(graph_seq)
 
         batch_size, seq_len, _ = graph_seq.shape
         pos = self.pos_embedding[:, :seq_len, :]
