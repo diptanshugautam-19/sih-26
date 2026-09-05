@@ -419,22 +419,44 @@ def add_flow_level_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
+    df = df.copy()
+
+    # If flow_key is missing, construct from available 5-tuple columns
+    if "flow_key" not in df.columns:
+        src = df["src_ip"].astype(str) if "src_ip" in df.columns else (df["Src IP"].astype(str) if "Src IP" in df.columns else "0.0.0.0")
+        dst = df["dst_ip"].astype(str) if "dst_ip" in df.columns else (df["Dst IP"].astype(str) if "Dst IP" in df.columns else "0.0.0.0")
+        sport = df["src_port"].astype(str) if "src_port" in df.columns else (df["Src Port"].astype(str) if "Src Port" in df.columns else "0")
+        dport = df["dst_port"].astype(str) if "dst_port" in df.columns else (df["Dst Port"].astype(str) if "Dst Port" in df.columns else "0")
+        proto = df["protocol"].astype(str) if "protocol" in df.columns else (df["Protocol"].astype(str) if "Protocol" in df.columns else "6")
+        df["flow_key"] = src + ":" + sport + "->" + dst + ":" + dport + "/" + proto
+
     grp = df.groupby("flow_key")
 
-    ttl_var = grp["ttl"].transform(lambda s: s.var(ddof=0) if len(s) > 1 else 0.0)
-    df["flow_ttl_variance"] = ttl_var.fillna(0.0)
+    if "ttl" in df.columns:
+        ttl_var = grp["ttl"].transform(lambda s: s.var(ddof=0) if len(s) > 1 else 0.0)
+        df["flow_ttl_variance"] = ttl_var.fillna(0.0)
+    elif "flow_ttl_variance" not in df.columns:
+        df["flow_ttl_variance"] = 0.0
 
-    l4_data_len = df["payload_size"] - df["tcp_header_len"]
-    carries_data = l4_data_len > 0
+    # Enhanced TCP retransmission logic (only count duplicates that carry L4 data)
+    if "tcp_seq" in df.columns and df["tcp_seq"].notna().any():
+        payload = df["payload_size"] if "payload_size" in df.columns else pd.Series(0, index=df.index)
+        hdr_len = df["tcp_header_len"] if "tcp_header_len" in df.columns else pd.Series(20, index=df.index)
+        l4_data_len = payload - hdr_len.fillna(20)
+        carries_data = l4_data_len > 0
 
-    data_only = df[carries_data]
-    dup_seq_counts = (
-        data_only.groupby(["flow_key", "tcp_seq"])["tcp_seq"].transform("count")
-    )
-    dup_seq_counts_full = pd.Series(np.nan, index=df.index)
-    dup_seq_counts_full.loc[data_only.index] = dup_seq_counts
-
-    df["is_retransmission"] = carries_data & (dup_seq_counts_full > 1) & df["tcp_seq"].notna()
+        data_only = df[carries_data]
+        if not data_only.empty:
+            dup_seq_counts = (
+                data_only.groupby(["flow_key", "tcp_seq"])["tcp_seq"].transform("count")
+            )
+            dup_seq_counts_full = pd.Series(np.nan, index=df.index)
+            dup_seq_counts_full.loc[data_only.index] = dup_seq_counts
+            df["is_retransmission"] = carries_data & (dup_seq_counts_full > 1) & df["tcp_seq"].notna()
+        else:
+            df["is_retransmission"] = False
+    elif "is_retransmission" not in df.columns:
+        df["is_retransmission"] = False
 
     return df
 
