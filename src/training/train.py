@@ -233,7 +233,7 @@ def train(
 
     if model is None:
         model = CyberDefenceWorldModel(
-            node_dim=16, edge_dim=12, memory_dim=32, hidden_dim=64, seq_len=dataset.cfg.seq_len, horizon_k=dataset.cfg.horizon_k
+            node_dim=16, edge_dim=16, memory_dim=32, hidden_dim=64, seq_len=dataset.cfg.seq_len, horizon_k=dataset.cfg.horizon_k
         )
     model = model.to(device)
 

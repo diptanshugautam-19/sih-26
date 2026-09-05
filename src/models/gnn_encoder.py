@@ -23,7 +23,7 @@ class GNNEncoder(nn.Module):
 
     Args:
         node_in_dim: Number of input node features (default: 16 from graph_builder.py).
-        edge_in_dim: Number of input edge features (default: 12 from graph_builder.py).
+        edge_in_dim: Number of input edge features (default: 16 from graph_builder.py).
         hidden_dim: Hidden representation dimension per node (default: 64).
         out_dim: Output graph embedding dimension (default: 64, matching graph_embedding_dim).
         num_heads: Number of attention heads (default: 4).
@@ -36,7 +36,7 @@ class GNNEncoder(nn.Module):
     def __init__(
         self,
         node_in_dim: int = 16,
-        edge_in_dim: int = 12,          # graph_builder.py produces 12 edge features
+        edge_in_dim: int = 16,          # graph_builder.py produces 16 edge features
         hidden_dim: int = 64,
         out_dim: int = 64,
         num_heads: int = 4,

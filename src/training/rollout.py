@@ -1,4 +1,4 @@
-﻿"""
+"""
 src/training/rollout.py
 
 K-Step Forward Rollout Evaluation for the Predictive Cyber Defence World Model.
@@ -118,7 +118,8 @@ def evaluate_rollout_dataset(
             preds = model.forward_sequence(seq)
 
             gt_pred = preds["grounded_telemetry"].cpu().numpy()    # [K, 3]
-            gt_true = sample.grounded_targets.numpy()              # [K, 3]
+            gt_raw = sample.grounded_targets
+            gt_true = gt_raw.cpu().numpy() if hasattr(gt_raw, "cpu") else np.asarray(gt_raw)
 
             all_grounded_pred.append(gt_pred)
             all_grounded_true.append(gt_true)
@@ -127,7 +128,8 @@ def evaluate_rollout_dataset(
             all_infil_true.append(float(sample.infiltration_target))
 
             all_stage_pred.append(int(preds["stage_logits"].argmax().item()))
-            all_stage_true.append(int(sample.stage_id))
+            stage_val = getattr(sample, "mitre_stage_id", getattr(sample, "stage_id", 0))
+            all_stage_true.append(int(stage_val))
 
     pred_arr  = np.stack(all_grounded_pred)   # [N, K, 3]
     true_arr  = np.stack(all_grounded_true)   # [N, K, 3]

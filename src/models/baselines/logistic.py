@@ -75,11 +75,17 @@ class PerFlowLogisticBaseline:
         if "mitre_stage_id" in df.columns:
             y = (df["mitre_stage_id"] > 0).astype(int).values
         elif "label" in df.columns:
-            from src.labels.attack_mapping import is_malicious
-            y = df["label"].apply(is_malicious).astype(int).values
+            if np.issubdtype(df["label"].dtype, np.number) or df["label"].dtype == bool:
+                y = (df["label"].astype(int) > 0).astype(int).values
+            else:
+                from src.labels.attack_mapping import is_malicious
+                y = df["label"].apply(is_malicious).astype(int).values
         elif "Label" in df.columns:
-            from src.labels.attack_mapping import is_malicious
-            y = df["Label"].apply(is_malicious).astype(int).values
+            if np.issubdtype(df["Label"].dtype, np.number) or df["Label"].dtype == bool:
+                y = (df["Label"].astype(int) > 0).astype(int).values
+            else:
+                from src.labels.attack_mapping import is_malicious
+                y = df["Label"].apply(is_malicious).astype(int).values
         else:
             y = np.zeros(len(df), dtype=int)
 
