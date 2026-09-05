@@ -60,3 +60,8 @@ Thumbs.db
 # Reports & figures cache
 reports/figures/*
 !reports/figures/.gitkeep
+
+# Node & Frontend
+node_modules/
+frontend/dist/
+frontend_streamlit/
