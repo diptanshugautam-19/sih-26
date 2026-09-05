@@ -38,20 +38,26 @@ class DynamicGATWithMemory(nn.Module):
         self,
         node_feat_dim: int = 16,
         edge_feat_dim: int = 12,
+        node_in_dim: int | None = None,
+        edge_in_dim: int | None = None,
         memory_dim: int = 32,
         hidden_dim: int = 64,
         num_heads: int = 4,
         dropout: float = 0.1,
+        **kwargs,
     ):
         super().__init__()
+        actual_node_dim = node_in_dim if node_in_dim is not None else node_feat_dim
+        actual_edge_dim = edge_in_dim if edge_in_dim is not None else edge_feat_dim
+
         self.hidden_dim = hidden_dim
         self.memory_dim = memory_dim
         self.num_heads = num_heads
         self.head_dim = hidden_dim // num_heads
 
         # Node feature projection (combines static features + prior node memory)
-        self.node_proj = nn.Linear(node_feat_dim + memory_dim, hidden_dim)
-        self.edge_proj = nn.Linear(edge_feat_dim, hidden_dim)
+        self.node_proj = nn.Linear(actual_node_dim + memory_dim, hidden_dim)
+        self.edge_proj = nn.Linear(actual_edge_dim, hidden_dim)
 
         # Multi-head attention projections
         self.q_proj = nn.Linear(hidden_dim, hidden_dim)

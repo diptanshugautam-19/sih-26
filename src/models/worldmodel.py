@@ -23,16 +23,27 @@ from src.data.graph_builder import NetworkGraphSnapshot
 class CyberDefenceWorldModel(nn.Module):
     def __init__(
         self,
-        node_dim: int = 16,
-        edge_dim: int = 12,
+        node_in_dim: int = 16,
+        edge_in_dim: int = 12,
+        node_dim: int | None = None,
+        edge_dim: int | None = None,
         memory_dim: int = 32,
         hidden_dim: int = 64,
         num_heads: int = 4,
         seq_len: int = 10,
         horizon_k: int = 4,
         dropout: float = 0.1,
+        **kwargs,
     ):
         super().__init__()
+        actual_node_dim = node_dim if node_dim is not None else node_in_dim
+        actual_edge_dim = edge_dim if edge_dim is not None else edge_in_dim
+
+        self.node_in_dim = actual_node_dim
+        self.edge_in_dim = actual_edge_dim
+        self.node_dim = actual_node_dim
+        self.edge_dim = actual_edge_dim
+
         self.seq_len = seq_len
         self.horizon_k = horizon_k
         self.hidden_dim = hidden_dim
@@ -40,8 +51,8 @@ class CyberDefenceWorldModel(nn.Module):
 
         # 1. Spatial Dynamic GNN Encoder
         self.spatial_gnn = DynamicGATWithMemory(
-            node_feat_dim=node_dim,
-            edge_feat_dim=edge_dim,
+            node_feat_dim=actual_node_dim,
+            edge_feat_dim=actual_edge_dim,
             memory_dim=memory_dim,
             hidden_dim=hidden_dim,
             num_heads=num_heads,
@@ -170,3 +181,9 @@ class CyberDefenceWorldModel(nn.Module):
             "confidence_lower": max(0.0, mean_p - 1.96 * std_p),
             "confidence_upper": min(1.0, mean_p + 1.96 * std_p),
         }
+
+
+# Standard alias matching project specifications
+WorldModel = CyberDefenceWorldModel
+
+__all__ = ["CyberDefenceWorldModel", "WorldModel"]

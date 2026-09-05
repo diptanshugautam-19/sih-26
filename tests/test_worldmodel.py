@@ -66,6 +66,19 @@ class TestCyberDefenceWorldModel(unittest.TestCase):
         self.assertIn("confidence_lower", uncertainty)
         self.assertIn("confidence_upper", uncertainty)
 
+    def test_worldmodel_node_in_dim_edge_in_dim_defaults(self):
+        from src.models import WorldModel
+        # Test default initialization matches graph_builder (16 node features, 12 edge features)
+        default_wm = WorldModel(seq_len=5, horizon_k=4)
+        self.assertEqual(default_wm.node_in_dim, 16)
+        self.assertEqual(default_wm.edge_in_dim, 12)
+        
+        # Test explicit node_in_dim and edge_in_dim kwargs
+        explicit_wm = WorldModel(node_in_dim=16, edge_in_dim=12, seq_len=5, horizon_k=4)
+        preds = explicit_wm.forward_sequence(self.seq)
+        self.assertIn("infiltration_prob", preds)
+        self.assertEqual(preds["grounded_telemetry"].shape, (4, 3))
+
 
 if __name__ == "__main__":
     unittest.main()
