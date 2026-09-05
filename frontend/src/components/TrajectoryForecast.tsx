@@ -38,16 +38,16 @@ export const TrajectoryForecast: React.FC<TrajectoryForecastProps> = ({
   const chartH = height - paddingTop - paddingBottom;
 
   // X coordinate interpolation for points (9 points from index 0 to 8)
-  const getX = (index: number) => paddingLeft + (index / (points.length - 1)) * chartW;
+  const getX = (index: number) => points.length > 1 ? paddingLeft + (index / (points.length - 1)) * chartW : paddingLeft;
   // Y coordinate interpolation (0% at bottom, 100% at top)
   const getY = (val: number) => paddingTop + chartH - (val / 100) * chartH;
 
   // Find index of 'NOW'
   const nowIndex = points.findIndex((p) => p.isNow);
-  const nowX = nowIndex !== -1 ? getX(nowIndex) : getX(4);
+  const nowX = nowIndex !== -1 ? getX(nowIndex) : getX(0);
 
   // Build SVG path for Actual / Measured past
-  const pastPoints = points.slice(0, nowIndex + 1);
+  const pastPoints = points.slice(0, Math.max(0, nowIndex + 1));
   const pastPath = pastPoints.reduce((acc, p, idx) => {
     const x = getX(idx);
     const y = getY(p.actual ?? p.baseline);
@@ -55,7 +55,7 @@ export const TrajectoryForecast: React.FC<TrajectoryForecastProps> = ({
   }, '');
 
   // Build SVG path for Future Counterfactual (or baseline)
-  const futurePoints = points.slice(nowIndex);
+  const futurePoints = nowIndex >= 0 ? points.slice(nowIndex) : [];
   const futureCounterfactualPath = futurePoints.reduce((acc, p, idx) => {
     const actualIdx = nowIndex + idx;
     const x = getX(actualIdx);
@@ -116,33 +116,44 @@ export const TrajectoryForecast: React.FC<TrajectoryForecastProps> = ({
       </div>
 
       {/* SVG Chart Area */}
-      <div className="relative w-full h-[220px] px-2 py-1 select-none">
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          className="w-full h-full"
-          preserveAspectRatio="none"
-        >
-          <defs>
-            <linearGradient id="ciGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.04" />
-            </linearGradient>
-            <linearGradient id="areaGlow" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#00f0ff" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#00f0ff" stopOpacity="0" />
-            </linearGradient>
-          </defs>
+      <div className="relative w-full h-[220px] px-2 py-1 select-none flex items-center justify-center">
+        {points.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-6 text-center">
+            <Radio className="w-8 h-8 text-slate-500 mb-2" />
+            <h4 className="text-slate-300 font-mono font-bold text-xs tracking-wider uppercase">
+              No Trajectory Forecast Data
+            </h4>
+            <p className="text-slate-500 text-[11px] font-mono max-w-xs mt-1">
+              Awaiting window sequence from backend. Future states will project across K horizons once traffic is ingested.
+            </p>
+          </div>
+        ) : (
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            className="w-full h-full"
+            preserveAspectRatio="none"
+          >
+            <defs>
+              <linearGradient id="ciGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.04" />
+              </linearGradient>
+              <linearGradient id="areaGlow" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#00f0ff" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="#00f0ff" stopOpacity="0" />
+              </linearGradient>
+            </defs>
 
-          {/* Horizontal Grid lines & Y-axis labels */}
-          {[100, 75, 50, 25, 0].map((val) => {
-            const y = getY(val);
-            return (
-              <g key={val}>
-                <line
-                  x1={paddingLeft}
-                  y1={y}
-                  x2={width - paddingRight}
-                  y2={y}
+            {/* Horizontal Grid lines & Y-axis labels */}
+            {[100, 75, 50, 25, 0].map((val) => {
+              const y = getY(val);
+              return (
+                <g key={val}>
+                  <line
+                    x1={paddingLeft}
+                    y1={y}
+                    x2={width - paddingRight}
+                    y2={y}
                   stroke="#102344"
                   strokeWidth="1"
                   strokeDasharray="2, 4"
@@ -246,6 +257,7 @@ export const TrajectoryForecast: React.FC<TrajectoryForecastProps> = ({
             );
           })}
         </svg>
+        )}
 
         {/* Hover Tooltip */}
         {hoveredPoint && (
@@ -271,10 +283,10 @@ export const TrajectoryForecast: React.FC<TrajectoryForecastProps> = ({
           </div>
           <div className="flex items-baseline space-x-1.5">
             <span className="text-base sm:text-lg font-bold font-mono text-white">
-              {portEntropy.toFixed(1)}
+              {portEntropy != null ? portEntropy.toFixed(1) : '--'}
             </span>
             <span className="text-[11px] font-mono font-semibold text-rose-400">
-              ↗ 0.8
+              {portEntropy != null ? '↗ 0.8' : ''}
             </span>
           </div>
         </div>
@@ -286,10 +298,10 @@ export const TrajectoryForecast: React.FC<TrajectoryForecastProps> = ({
           </div>
           <div className="flex items-baseline space-x-1.5">
             <span className="text-base sm:text-lg font-bold font-mono text-white">
-              {synRatio.toFixed(2)}
+              {synRatio != null ? synRatio.toFixed(2) : '--'}
             </span>
             <span className="text-[11px] font-mono font-semibold text-rose-400">
-              ↗ 0.21
+              {synRatio != null ? '↗ 0.21' : ''}
             </span>
           </div>
         </div>
@@ -301,10 +313,10 @@ export const TrajectoryForecast: React.FC<TrajectoryForecastProps> = ({
           </div>
           <div className="flex items-baseline space-x-1.5">
             <span className="text-base sm:text-lg font-bold font-mono text-white">
-              {logByteVolume.toFixed(1)}
+              {logByteVolume != null ? logByteVolume.toFixed(1) : '--'}
             </span>
             <span className="text-[11px] font-mono text-slate-400">
-              stable
+              {logByteVolume != null ? 'stable' : ''}
             </span>
           </div>
         </div>
@@ -312,53 +324,59 @@ export const TrajectoryForecast: React.FC<TrajectoryForecastProps> = ({
 
       {/* Kill Chain Progress Timeline (Steps 1 to 7) */}
       <div className="px-4 sm:px-5 py-3.5 bg-[#071329]/60 border-t border-[#102344]">
-        <div className="relative flex items-center justify-between">
-          {/* Connecting background track */}
-          <div className="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-0.5 bg-[#12284c] z-0" />
+        {killChainStages.length === 0 ? (
+          <div className="text-center py-1 text-slate-500 text-xs font-mono">
+            Awaiting MITRE ATT&CK kill chain stage progression from telemetry...
+          </div>
+        ) : (
+          <div className="relative flex items-center justify-between">
+            {/* Connecting background track */}
+            <div className="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-0.5 bg-[#12284c] z-0" />
 
-          {killChainStages.map((st) => {
-            const isCompleted = st.status === 'completed';
-            const isActive = st.status === 'active';
+            {killChainStages.map((st) => {
+              const isCompleted = st.status === 'completed';
+              const isActive = st.status === 'active';
 
-            return (
-              <div
-                key={st.step}
-                className="relative z-10 flex flex-col items-center group cursor-pointer"
-                title={`${st.step}. ${st.name} (${st.tacticId})`}
-              >
-                {/* Circle badge */}
+              return (
                 <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold font-mono transition-all ${
-                    isCompleted
-                      ? 'bg-emerald-950 border border-emerald-500 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
-                      : isActive
-                      ? 'bg-amber-950 border-2 border-amber-400 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.5)] ring-2 ring-amber-500/30'
-                      : 'bg-[#08152e] border border-[#163868] text-slate-500'
-                  }`}
+                  key={st.step}
+                  className="relative z-10 flex flex-col items-center group cursor-pointer"
+                  title={`${st.step}. ${st.name} (${st.tacticId})`}
                 >
-                  {isCompleted ? (
-                    <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                  ) : (
-                    <span>{st.step}</span>
-                  )}
-                </div>
+                  {/* Circle badge */}
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold font-mono transition-all ${
+                      isCompleted
+                        ? 'bg-emerald-950 border border-emerald-500 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                        : isActive
+                        ? 'bg-amber-950 border-2 border-amber-400 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.5)] ring-2 ring-amber-500/30'
+                        : 'bg-[#08152e] border border-[#163868] text-slate-500'
+                    }`}
+                  >
+                    {isCompleted ? (
+                      <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                    ) : (
+                      <span>{st.step}</span>
+                    )}
+                  </div>
 
-                {/* Stage name label */}
-                <span
-                  className={`mt-1.5 text-[10px] font-mono tracking-tight transition-colors whitespace-nowrap ${
-                    isActive
-                      ? 'text-amber-400 font-bold'
-                      : isCompleted
-                      ? 'text-slate-300'
-                      : 'text-slate-600'
-                  }`}
-                >
-                  {st.name}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+                  {/* Stage name label */}
+                  <span
+                    className={`mt-1.5 text-[10px] font-mono tracking-tight transition-colors whitespace-nowrap ${
+                      isActive
+                        ? 'text-amber-400 font-bold'
+                        : isCompleted
+                        ? 'text-slate-300'
+                        : 'text-slate-600'
+                    }`}
+                  >
+                    {st.name}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -229,6 +229,37 @@ async def predict(
     )
 
 
+@router.post("/predict-sample", response_model=PredictResponse)
+async def predict_sample(request: Request) -> PredictResponse:
+    """Convenience endpoint returning model predictions on backend sample telemetry."""
+    from pathlib import Path
+    sample_path = Path("data/raw/synthetic_test.csv")
+    if sample_path.exists():
+        df_raw = pd.read_csv(sample_path).head(150)
+    else:
+        df_raw = pd.DataFrame({
+            "timestamp": [100.0, 102.5, 105.0, 107.5],
+            "src_ip": ["10.0.0.5", "10.0.0.6", "10.0.0.5", "10.0.0.7"],
+            "dst_ip": ["192.168.1.1", "192.168.1.2", "192.168.1.1", "8.8.8.8"],
+            "src_port": [45120, 45122, 45124, 45126],
+            "dst_port": [80, 443, 80, 445],
+            "protocol": [6, 6, 6, 6],
+            "tot_fwd_pkts": [10, 15, 20, 25],
+            "tot_bwd_pkts": [8, 12, 18, 22],
+            "tot_len_fwd_pkts": [1000, 1500, 2000, 2500],
+            "tot_len_bwd_pkts": [800, 1200, 1800, 2200],
+            "flag_syn": [1, 1, 1, 1],
+            "flag_ack": [1, 1, 1, 1],
+            "flag_rst": [0, 0, 0, 0],
+            "flag_fin": [0, 0, 0, 0],
+            "flow_duration": [1.0, 1.0, 1.0, 1.0],
+            "label": ["Benign", "Benign", "Benign", "Benign"],
+        })
+    csv_bytes = df_raw.to_csv(index=False).encode("utf-8")
+    fake_file = UploadFile(filename="sample.csv", file=io.BytesIO(csv_bytes))
+    return await predict(request=request, file=fake_file)
+
+
 @router.post("/counterfactual", response_model=CounterfactualResponse)
 async def counterfactual(
     request: Request,

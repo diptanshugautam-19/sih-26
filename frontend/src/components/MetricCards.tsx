@@ -2,14 +2,14 @@ import React from 'react';
 import { Gauge, ArrowUpRight, Target, Database } from 'lucide-react';
 
 interface MetricCardsProps {
-  infiltrationRisk: number;
+  infiltrationRisk: number | null;
   riskTrend: string;
   leadTime: string;
   leadTimeDelta: string;
   predictedStage: string;
   mitreTactic: string;
-  modelConfidence: number;
-  uncertainty: number;
+  modelConfidence: number | null;
+  uncertainty: number | null;
 }
 
 export const MetricCards: React.FC<MetricCardsProps> = ({
@@ -35,11 +35,17 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
               Infiltration risk
             </span>
             <div className="text-3xl sm:text-4xl font-extrabold font-mono text-rose-500 drop-shadow-[0_0_12px_rgba(244,63,94,0.35)]">
-              {infiltrationRisk}%
+              {infiltrationRisk != null ? `${infiltrationRisk}%` : '--'}
             </div>
             <div className="flex items-center space-x-1.5 text-xs font-mono text-rose-400">
-              <span className="font-bold">+{riskTrend}%</span>
-              <span>Attack imminent</span>
+              {infiltrationRisk != null ? (
+                <>
+                  <span className="font-bold">+{riskTrend}%</span>
+                  <span>Attack imminent</span>
+                </>
+              ) : (
+                <span className="text-slate-500">No telemetry stream</span>
+              )}
             </div>
           </div>
         </div>
@@ -59,8 +65,14 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
               {leadTime}
             </div>
             <div className="flex items-center space-x-1.5 text-xs font-mono text-cyan-400">
-              <span className="font-bold">{leadTimeDelta}</span>
-              <span>vs reactive baseline</span>
+              {leadTime !== '--' && leadTime !== '0.0s' ? (
+                <>
+                  <span className="font-bold">{leadTimeDelta}</span>
+                  <span>vs reactive baseline</span>
+                </>
+              ) : (
+                <span className="text-slate-500">Awaiting detection</span>
+              )}
             </div>
           </div>
         </div>
@@ -97,11 +109,17 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
               Model confidence
             </span>
             <div className="text-3xl sm:text-4xl font-extrabold font-mono text-emerald-400 drop-shadow-[0_0_12px_rgba(16,185,129,0.3)]">
-              {modelConfidence}%
+              {modelConfidence != null ? `${modelConfidence}%` : '--'}
             </div>
             <div className="flex items-center space-x-1.5 text-xs font-mono text-slate-400">
-              <span className="text-rose-400 font-semibold">stable</span>
-              <span>Uncertainty ± {uncertainty}%</span>
+              {uncertainty != null ? (
+                <>
+                  <span className="text-rose-400 font-semibold">calibrated</span>
+                  <span>Uncertainty ± {uncertainty}%</span>
+                </>
+              ) : (
+                <span className="text-slate-500">Uncalibrated (no input)</span>
+              )}
             </div>
           </div>
         </div>

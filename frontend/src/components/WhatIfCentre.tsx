@@ -25,9 +25,9 @@ interface WhatIfCentreProps {
   onSelectPort: (port: number) => void;
   onRunSimulation: () => void;
   isSimulating: boolean;
-  currentThreatRisk: number;
-  simulatedRisk: number;
-  deltaPts: number;
+  currentThreatRisk: number | null;
+  simulatedRisk: number | null;
+  deltaPts: number | null;
   recentSimulations: SimulationRecord[];
   onSelectSimulation: (sim: SimulationRecord) => void;
   onDeployPolicy: () => void;
@@ -55,7 +55,7 @@ export const WhatIfCentre: React.FC<WhatIfCentreProps> = ({
   const [showHostDropdown, setShowHostDropdown] = useState(false);
   const [showDeploySuccess, setShowDeploySuccess] = useState(false);
 
-  const selectedHost = hosts.find((h) => h.id === selectedTargetHostId) || hosts[0];
+  const selectedHost = hosts.find((h) => h.id === selectedTargetHostId) || hosts[0] || null;
 
   const handleDeploy = () => {
     if (soundEnabled) playCyberTone('success');
@@ -143,20 +143,21 @@ export const WhatIfCentre: React.FC<WhatIfCentreProps> = ({
             Target Host
           </label>
           <button
-            onClick={() => setShowHostDropdown(!showHostDropdown)}
-            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg border border-[#142d54] bg-[#071329] text-xs font-mono text-slate-200 hover:border-cyan-500/40 transition-colors"
+            onClick={() => hosts.length > 0 && setShowHostDropdown(!showHostDropdown)}
+            disabled={hosts.length === 0}
+            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg border border-[#142d54] bg-[#071329] text-xs font-mono text-slate-200 hover:border-cyan-500/40 transition-colors disabled:opacity-50"
           >
             <span className="font-bold text-white">
-              {selectedHost.name}
+              {selectedHost ? selectedHost.name : 'No Target Host (Awaiting Telemetry)'}
             </span>
             <div className="flex items-center space-x-2 text-slate-400">
-              <span>{selectedHost.ip}</span>
+              <span>{selectedHost ? selectedHost.ip : '--'}</span>
               <ChevronDown className="w-3.5 h-3.5" />
             </div>
           </button>
 
           {/* Host Dropdown Options */}
-          {showHostDropdown && (
+          {showHostDropdown && hosts.length > 0 && (
             <div className="absolute top-full left-0 right-0 mt-1 rounded-lg border border-[#173a72] bg-[#071329] shadow-2xl z-30 overflow-hidden divide-y divide-[#10264b]">
               {hosts.map((h) => (
                 <div
@@ -213,11 +214,11 @@ export const WhatIfCentre: React.FC<WhatIfCentreProps> = ({
             if (soundEnabled) playCyberTone('sim');
             onRunSimulation();
           }}
-          disabled={isSimulating}
-          className="w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold font-mono text-sm tracking-wide shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_25px_rgba(6,182,212,0.6)] active:scale-98 transition-all disabled:opacity-50"
+          disabled={isSimulating || hosts.length === 0}
+          className="w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold font-mono text-sm tracking-wide shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_25px_rgba(6,182,212,0.6)] active:scale-98 transition-all disabled:opacity-40"
         >
           <Zap className={`w-4 h-4 fill-slate-950 ${isSimulating ? 'animate-bounce' : ''}`} />
-          <span>{isSimulating ? 'Simulating in memory...' : 'Simulate defence'}</span>
+          <span>{hosts.length === 0 ? 'Awaiting Host Telemetry...' : isSimulating ? 'Simulating in memory...' : 'Simulate defence'}</span>
         </button>
 
         {/* SIMULATED RISK REDUCTION METRICS */}
@@ -230,16 +231,16 @@ export const WhatIfCentre: React.FC<WhatIfCentreProps> = ({
           <div className="flex items-baseline justify-between">
             <div className="flex items-center space-x-2 font-mono">
               <span className="text-2xl sm:text-3xl font-extrabold text-rose-500">
-                {currentThreatRisk}%
+                {currentThreatRisk != null ? `${currentThreatRisk}%` : '--'}
               </span>
               <span className="text-slate-400 text-lg">↘</span>
               <span className="text-2xl sm:text-3xl font-extrabold text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]">
-                {simulatedRisk}%
+                {simulatedRisk != null ? `${simulatedRisk}%` : '--'}
               </span>
             </div>
 
             <div className="text-sm sm:text-base font-mono font-bold text-emerald-400 bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-500/30">
-              {deltaPts > 0 ? `-${deltaPts} pts` : `${deltaPts} pts`}
+              {deltaPts != null ? (deltaPts > 0 ? `-${deltaPts} pts` : `${deltaPts} pts`) : '--'}
             </div>
           </div>
 
@@ -247,11 +248,11 @@ export const WhatIfCentre: React.FC<WhatIfCentreProps> = ({
           <div className="relative h-2 w-full rounded-full bg-[#0c1c38] overflow-hidden">
             <div
               className="absolute left-0 top-0 bottom-0 bg-rose-500 transition-all duration-500"
-              style={{ width: `${currentThreatRisk}%` }}
+              style={{ width: `${currentThreatRisk || 0}%` }}
             />
             <div
               className="absolute left-0 top-0 bottom-0 bg-emerald-400 shadow-[0_0_8px_#34d399] transition-all duration-500"
-              style={{ width: `${simulatedRisk}%` }}
+              style={{ width: `${simulatedRisk || 0}%` }}
             />
           </div>
 
@@ -269,43 +270,49 @@ export const WhatIfCentre: React.FC<WhatIfCentreProps> = ({
           </div>
 
           <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-            {recentSimulations.map((sim) => (
-              <div
-                key={sim.id}
-                onClick={() => {
-                  if (soundEnabled) playCyberTone('click');
-                  onSelectSimulation(sim);
-                }}
-                className="flex items-center justify-between p-2.5 rounded-lg border border-[#122b54] bg-[#071329] hover:bg-[#0c234a] hover:border-cyan-500/30 cursor-pointer transition-colors text-xs font-mono"
-              >
-                <div className="flex items-center space-x-2.5">
-                  <div className="p-1.5 rounded bg-[#0b2247] text-cyan-400">
-                    {sim.actionType === 'isolate_host' ? (
-                      <Lock className="w-3.5 h-3.5" />
-                    ) : (
-                      <Ban className="w-3.5 h-3.5" />
-                    )}
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-200">
-                      {sim.actionLabel} · {sim.targetLabel}
-                    </div>
-                    <div className="text-[10px] text-slate-500 flex items-center space-x-1">
-                      <Clock className="w-2.5 h-2.5" />
-                      <span>{sim.timeAgo} · simulated</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <div className="text-[11px] font-bold text-slate-300">
-                    <span className="text-rose-400">{sim.initialRisk}%</span>
-                    <span className="text-slate-500 mx-1">↘</span>
-                    <span className="text-emerald-400">{sim.simulatedRisk}%</span>
-                  </div>
-                </div>
+            {recentSimulations.length === 0 ? (
+              <div className="text-center py-4 text-slate-500 text-[11px] font-mono border border-dashed border-[#142d54] rounded-lg">
+                No simulation history yet. Select an action above to test intervention impact.
               </div>
-            ))}
+            ) : (
+              recentSimulations.map((sim) => (
+                <div
+                  key={sim.id}
+                  onClick={() => {
+                    if (soundEnabled) playCyberTone('click');
+                    onSelectSimulation(sim);
+                  }}
+                  className="flex items-center justify-between p-2.5 rounded-lg border border-[#122b54] bg-[#071329] hover:bg-[#0c234a] hover:border-cyan-500/30 cursor-pointer transition-colors text-xs font-mono"
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <div className="p-1.5 rounded bg-[#0b2247] text-cyan-400">
+                      {sim.actionType === 'isolate_host' ? (
+                        <Lock className="w-3.5 h-3.5" />
+                      ) : (
+                        <Ban className="w-3.5 h-3.5" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-200">
+                        {sim.actionLabel} · {sim.targetLabel}
+                      </div>
+                      <div className="text-[10px] text-slate-500 flex items-center space-x-1">
+                        <Clock className="w-2.5 h-2.5" />
+                        <span>{sim.timeAgo} · simulated</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="text-[11px] font-bold text-slate-300">
+                      <span className="text-rose-400">{sim.initialRisk}%</span>
+                      <span className="text-slate-500 mx-1">↘</span>
+                      <span className="text-emerald-400">{sim.simulatedRisk}%</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 

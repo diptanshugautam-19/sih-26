@@ -46,7 +46,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
     return true;
   });
 
-  const selectedHost = hosts.find((h) => h.id === selectedHostId) || hosts[0];
+  const selectedHost = hosts.find((h) => h.id === selectedHostId) || hosts[0] || null;
 
   const getNodeIcon = (host: NetworkHost) => {
     if (host.id === 'c2-ext') return <Globe className="w-4 h-4 text-rose-400" />;
@@ -62,6 +62,21 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
     'app-07': { x: 380, y: 280 },
     'db-02': { x: 540, y: 170 },
     'c2-ext': { x: 700, y: 300 }
+  };
+
+  const getNodeCoord = (hostId: string) => {
+    if (nodeCoords[hostId]) return nodeCoords[hostId];
+    const h = hosts.find((item) => item.id === hostId);
+    if (h && typeof h.x === 'number' && typeof h.y === 'number') {
+      return { x: h.x, y: h.y };
+    }
+    const idx = hosts.findIndex((item) => item.id === hostId);
+    if (idx >= 0) {
+      const col = (idx % 4) * 160 + 120;
+      const row = Math.floor(idx / 4) * 140 + 120;
+      return { x: col, y: row };
+    }
+    return { x: 400, y: 200 };
   };
 
   return (
@@ -114,11 +129,11 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
         <div className="flex items-center space-x-4 text-[11px] text-slate-400">
           <span className="flex items-center space-x-1.5">
             <span className="w-2 h-2 rounded-xs bg-rose-500" />
-            <span>5 active hosts</span>
+            <span>{hosts.length} active hosts</span>
           </span>
           <span className="flex items-center space-x-1.5">
             <span className="w-2 h-2 rounded-xs bg-cyan-500" />
-            <span>12 edges</span>
+            <span>{edges.length} edges</span>
           </span>
         </div>
       </div>
@@ -131,31 +146,45 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
 
       {/* Interactive Topology Graph Canvas / SVG */}
       <div className="relative w-full h-[320px] sm:h-[350px] cyber-grid overflow-hidden">
-        {/* Subtle background segment dividing line */}
-        <div className="absolute top-0 bottom-0 left-[68%] border-l border-dashed border-[#142b4e] pointer-events-none opacity-60" />
+        {hosts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-8 text-center h-full">
+            <div className="p-3.5 rounded-xl border border-cyan-500/20 bg-cyan-950/20 mb-3 text-cyan-400">
+              <ShieldAlert className="w-8 h-8 animate-pulse text-cyan-400/80" />
+            </div>
+            <h4 className="text-slate-200 font-mono font-bold text-sm tracking-wider uppercase">
+              No Network Topology Data
+            </h4>
+            <p className="text-slate-400 text-xs font-mono max-w-sm mt-1.5 leading-relaxed">
+              No active hosts detected. Upload telemetry or stream from backend to render graph.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Subtle background segment dividing line */}
+            <div className="absolute top-0 bottom-0 left-[68%] border-l border-dashed border-[#142b4e] pointer-events-none opacity-60" />
 
-        <svg className="w-full h-full" viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet">
-          <defs>
-            {/* Glow filters */}
-            <filter id="cyanGlow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
-              <feComposite in="SourceGraphic" in2="blur" operator="over" />
-            </filter>
-            <filter id="redGlow" x="-30%" y="-30%" width="160%" height="160%">
-              <feGaussianBlur stdDeviation="4" result="blur" />
-              <feComposite in="SourceGraphic" in2="blur" operator="over" />
-            </filter>
-            <linearGradient id="attackGrad" x1="100%" y1="100%" x2="0%" y2="0%">
-              <stop offset="0%" stopColor="#f43f5e" />
-              <stop offset="100%" stopColor="#fb7185" />
-            </linearGradient>
-          </defs>
+            <svg className="w-full h-full" viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                {/* Glow filters */}
+                <filter id="cyanGlow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+                <filter id="redGlow" x="-30%" y="-30%" width="160%" height="160%">
+                  <feGaussianBlur stdDeviation="4" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+                <linearGradient id="attackGrad" x1="100%" y1="100%" x2="0%" y2="0%">
+                  <stop offset="0%" stopColor="#f43f5e" />
+                  <stop offset="100%" stopColor="#fb7185" />
+                </linearGradient>
+              </defs>
 
-          {/* Render Edges */}
-          {edges.map((edge) => {
-            const src = nodeCoords[edge.source];
-            const tgt = nodeCoords[edge.target];
-            if (!src || !tgt) return null;
+              {/* Render Edges */}
+              {edges.map((edge) => {
+                const src = getNodeCoord(edge.source);
+                const tgt = getNodeCoord(edge.target);
+                if (!src || !tgt) return null;
 
             const isSourceIsolated = isolatedHostIds.includes(edge.source);
             const isTargetIsolated = isolatedHostIds.includes(edge.target);
@@ -289,7 +318,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
 
           {/* Render Nodes */}
           {hosts.map((host) => {
-            const coords = nodeCoords[host.id];
+            const coords = getNodeCoord(host.id);
             if (!coords) return null;
 
             const isSelected = selectedHostId === host.id;
@@ -417,6 +446,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
             );
           })}
         </svg>
+          </>
+        )}
 
         {/* Selected Host Floating Inspector Overlay */}
         {showInspector && selectedHost && (
