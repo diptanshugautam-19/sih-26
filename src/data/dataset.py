@@ -33,7 +33,7 @@ from src.data.windowing import (
     build_sequences,
     make_target_windows,
 )
-from src.labels.pseudo_labeler import infer_pseudo_mitre_stage
+
 
 
 TAU_DECAY = 10.0  # Seconds. Controls how sharply y_t decays away from attack onset.
@@ -94,7 +94,6 @@ class CyberDefenceDataset(Dataset):
         """
         super().__init__()
         self.cfg = cfg
-        self._registry = PersistentNodeRegistry()
         self.samples: List[SequenceSample] = []
 
         self._build(df, min_packets_per_window)
@@ -113,6 +112,7 @@ class CyberDefenceDataset(Dataset):
         df = df.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
         t_min = float(df["timestamp"].min())
         t_max = float(df["timestamp"].max())
+        ts_arr = df["timestamp"].to_numpy(dtype=float)
 
         if t_max - t_min < self.cfg.window_size:
             raise ValueError(
@@ -135,7 +135,7 @@ class CyberDefenceDataset(Dataset):
             for wid, grp_assign in assignment.groupby("window_id"):
                 win_groups[int(wid)] = df_with_pos.iloc[grp_assign["row_index"].to_numpy()]
 
-        # 4. Per-window: build graph snapshots
+        # 4. Per-window: build graph snapshots (window-scoped node registry, zero ghost nodes)
         graphs: Dict[int, Optional[NetworkGraphSnapshot]] = {}
         for wid in range(n_windows):
             win_df = win_groups.get(wid, pd.DataFrame())
@@ -144,7 +144,7 @@ class CyberDefenceDataset(Dataset):
                 continue
             w_start = float(input_windows.loc[wid, "start"])
             w_end   = float(input_windows.loc[wid, "end"])
-            snap = build_graph_for_window(win_df, self._registry, window_id=wid,
+            snap = build_graph_for_window(win_df, registry=PersistentNodeRegistry(), window_id=wid,
                                           start_time=w_start, end_time=w_end)
             graphs[wid] = snap
 
@@ -210,8 +210,8 @@ class CyberDefenceDataset(Dataset):
             mitre_stage = int(pd.Series(stage_vals).mode().iloc[0]) if stage_vals else 0
             mitre_conf  = float(np.mean(conf_vals)) if conf_vals else 0.5
 
-            # Grounded telemetry targets from target windows
-            grounded = self._build_grounded_targets(df, win_groups, target_wins)
+            # Grounded telemetry targets from target windows (fast O(log N) slice)
+            grounded = self._build_grounded_targets(df, ts_arr, target_wins)
 
             self.samples.append(SequenceSample(
                 graph_sequence=snaps,
@@ -225,7 +225,7 @@ class CyberDefenceDataset(Dataset):
     def _build_grounded_targets(
         self,
         df: pd.DataFrame,
-        win_groups: Dict[int, pd.DataFrame],
+        ts_arr: np.ndarray,
         target_wins: pd.DataFrame,
     ) -> torch.Tensor:
         """
@@ -233,18 +233,22 @@ class CyberDefenceDataset(Dataset):
             dim 0: destination port entropy
             dim 1: SYN ratio
             dim 2: log1p(total bytes)
-        These are the actual measured values in future windows — our supervision signal.
+        Uses O(log N) searchsorted on sorted timestamps to prevent redundant full-table scans.
         """
         import math
-        t_min_global = df["timestamp"].min()
         targets = []
         for tid in range(self.cfg.horizon_k):
             t_start = float(target_wins.loc[tid, "start"])
             t_end = float(target_wins.loc[tid, "end"])
-            win_rows = df[(df["timestamp"] >= t_start) & (df["timestamp"] < t_end)]
-            if win_rows.empty:
+
+            i_start = int(np.searchsorted(ts_arr, t_start, side="left"))
+            i_end = int(np.searchsorted(ts_arr, t_end, side="left"))
+
+            if i_start >= i_end:
                 targets.append([0.0, 0.0, 0.0])
                 continue
+
+            win_rows = df.iloc[i_start:i_end]
             # Port entropy
             ports = win_rows["dst_port"].dropna()
             if len(ports) > 0:
@@ -312,17 +316,40 @@ def make_dataloaders(
     batch_size: int = 8,
     seed: int = 42,
     weighted_sampler: bool = True,
+    split_mode: str = "temporal",
+    buffer_sequences: int = 14,
+    holdout_stages: Optional[List[int]] = None,
 ) -> Tuple[DataLoader, DataLoader, DataLoader]:
-    """Splits dataset and returns (train_dl, val_dl, test_dl)."""
-    rng = random.Random(seed)
-    indices = list(range(len(dataset)))
-    rng.shuffle(indices)
+    """
+    Splits dataset and returns (train_dl, val_dl, test_dl).
 
-    n_train = int(len(indices) * train_frac)
-    n_val = int(len(indices) * val_frac)
-    train_idx = indices[:n_train]
-    val_idx = indices[n_train:n_train + n_val]
-    test_idx = indices[n_train + n_val:]
+    Split modes:
+    - 'temporal' (default): Contiguous chronological blocks separated by blackout
+      buffers (buffer >= seq_len + horizon_k) to eliminate overlapping sequence leakage.
+    - 'unseen_attack': Out-of-distribution split holding out specific MITRE stages for zero-day evaluation.
+    - 'random': Shuffled split (for baseline comparison / ablation only).
+    """
+    from src.labels.splits import temporal_block_split, unseen_attack_split
+
+    if split_mode == "temporal":
+        train_idx, val_idx, test_idx = temporal_block_split(
+            dataset, train_frac=train_frac, val_frac=val_frac, buffer_sequences=buffer_sequences
+        )
+    elif split_mode == "unseen_attack":
+        train_idx, val_idx, test_idx = unseen_attack_split(
+            dataset, holdout_stages=holdout_stages, buffer_sequences=buffer_sequences, seed=seed
+        )
+    elif split_mode == "random":
+        rng = random.Random(seed)
+        indices = list(range(len(dataset)))
+        rng.shuffle(indices)
+        n_train = int(len(indices) * train_frac)
+        n_val = int(len(indices) * val_frac)
+        train_idx = indices[:n_train]
+        val_idx = indices[n_train:n_train + n_val]
+        test_idx = indices[n_train + n_val:]
+    else:
+        raise ValueError(f"Unknown split_mode '{split_mode}'. Choose 'temporal', 'unseen_attack', or 'random'.")
 
     from torch.utils.data import Subset
     train_ds = Subset(dataset, train_idx)
@@ -346,3 +373,4 @@ def make_dataloaders(
     test_dl = DataLoader(test_ds, batch_size=batch_size, shuffle=False,
                          collate_fn=collate_sequences)
     return train_dl, val_dl, test_dl
+

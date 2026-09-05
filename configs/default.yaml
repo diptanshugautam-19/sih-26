@@ -34,7 +34,7 @@ data:
 
 graph:
   node_feature_dim: 16
-  edge_feature_dim: 12
+  edge_feature_dim: 16
   graph_embedding_dim: 64
 
 model:

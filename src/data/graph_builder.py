@@ -109,19 +109,23 @@ def build_graph_for_window(
     """
     if window_df.empty:
         # Return an empty graph structure
+        cur_nodes = registry.size() if registry is not None else 0
         return NetworkGraphSnapshot(
             window_id=window_id,
             start_time=start_time,
             end_time=end_time,
-            num_nodes=registry.size(),
+            num_nodes=cur_nodes,
             edge_index=torch.empty((2, 0), dtype=torch.long),
-            x=torch.zeros((max(registry.size(), 1), 16), dtype=torch.float32),
-            edge_attr=torch.empty((0, 12), dtype=torch.float32),
-            node_ips=[registry.id_to_ip.get(i, f"ip_{i}") for i in range(max(registry.size(), 1))],
+            x=torch.zeros((max(cur_nodes, 1), 16), dtype=torch.float32),
+            edge_attr=torch.empty((0, 16), dtype=torch.float32),
+            node_ips=[registry.id_to_ip.get(i, f"ip_{i}") for i in range(max(cur_nodes, 1))] if registry else [],
             grounded_dynamics=torch.zeros(3, dtype=torch.float32),
         )
 
-    # 1. Register all active IPs in registry
+    if registry is None:
+        registry = PersistentNodeRegistry()
+
+    # 1. Register active IPs in this window/sequence (scoped, zero ghost nodes)
     src_ips = window_df["src_ip"].astype(str).tolist()
     dst_ips = window_df["dst_ip"].astype(str).tolist()
     for ip in set(src_ips + dst_ips):
@@ -130,8 +134,16 @@ def build_graph_for_window(
     total_registered_nodes = registry.size()
     node_ips = [registry.id_to_ip[i] for i in range(total_registered_nodes)]
 
+    wdf = window_df.copy()
+    wdf["_src_str"] = wdf["src_ip"].astype(str)
+    wdf["_dst_str"] = wdf["dst_ip"].astype(str)
+
+    # Pre-compute bidirectional pair counts for O(1) ratio calculation
+    wdf["_pair"] = wdf["_src_str"] + "->" + wdf["_dst_str"]
+    pair_counts = wdf["_pair"].value_counts()
+
     # 2. Aggregate flows by (src_ip, dst_ip) to construct directed edges
-    grouped_edges = window_df.groupby(["src_ip", "dst_ip"])
+    grouped_edges = wdf.groupby(["_src_str", "_dst_str"])
 
     src_indices = []
     dst_indices = []
@@ -168,7 +180,29 @@ def build_graph_for_window(
         win_mean = _safe_float(edge_rows["tcp_window"].mean(), 1024.0) if "tcp_window" in edge_rows else 1024.0
         is_internal = _is_private_ip(str(s_ip))
 
-        # Edge feature vector (12 dimensions) - zero NaNs guaranteed
+        # Brief Requirements: Flow Inter-Arrival Time (IAT) statistics
+        if "timestamp" in edge_rows.columns and n_pkts > 1:
+            edge_ts = np.sort(pd.to_numeric(edge_rows["timestamp"], errors="coerce").dropna().values)
+            if len(edge_ts) > 1:
+                diffs = np.diff(edge_ts)
+                iat_mean = _safe_float(np.mean(diffs), 0.0)
+                iat_std  = _safe_float(np.std(diffs), 0.0)
+                iat_max  = _safe_float(np.max(diffs), 0.0)
+            else:
+                iat_mean, iat_std, iat_max = 0.0, 0.0, 0.0
+        elif "flow_iat_mean" in edge_rows.columns:
+            iat_mean = _safe_float(edge_rows["flow_iat_mean"].mean(), 0.0)
+            iat_std  = _safe_float(edge_rows["flow_iat_std"].mean() if "flow_iat_std" in edge_rows else 0.0, 0.0)
+            iat_max  = _safe_float(edge_rows["flow_iat_max"].mean() if "flow_iat_max" in edge_rows else 0.0, 0.0)
+        else:
+            iat_mean, iat_std, iat_max = 0.0, 0.0, 0.0
+
+        # Brief Requirements: Bidirectional flow ratio
+        fwd_count = pair_counts.get(f"{s_ip}->{d_ip}", n_pkts)
+        bwd_count = pair_counts.get(f"{d_ip}->{s_ip}", 0)
+        bidi_ratio = float(fwd_count / max(fwd_count + bwd_count, 1))
+
+        # Edge feature vector (16 dimensions) - zero NaNs guaranteed
         feat = [
             math.log1p(n_pkts),                               # 0: log packet count
             math.log1p(bytes_sum),                            # 1: log byte volume
@@ -182,6 +216,10 @@ def build_graph_for_window(
             ttl_std,                                          # 9: ttl std
             win_mean,                                         # 10: mean win
             is_internal,                                      # 11: internal private IP flag
+            iat_mean,                                         # 12: IAT mean (brief req)
+            iat_std,                                          # 13: IAT std (brief req)
+            iat_max,                                          # 14: IAT max (brief req)
+            bidi_ratio,                                       # 15: bidirectional flow ratio (brief req)
         ]
         edge_features_list.append(feat)
 
@@ -190,21 +228,25 @@ def build_graph_for_window(
         edge_attr = torch.tensor(edge_features_list, dtype=torch.float32)
     else:
         edge_index = torch.empty((2, 0), dtype=torch.long)
-        edge_attr = torch.empty((0, 12), dtype=torch.float32)
+        edge_attr = torch.empty((0, 16), dtype=torch.float32)
 
-    # 3. Compute Node Feature Matrix X [total_nodes, 16]
-    # Fully vectorized: one groupby per role instead of per-IP filter loops.
+    # 3. Compute Node Feature Matrix X [total_nodes, 16] - fully populated
     node_features = np.zeros((total_registered_nodes, 16), dtype=np.float32)
 
-    wdf = window_df.copy()
-    wdf["_src_str"] = wdf["src_ip"].astype(str)
-    wdf["_dst_str"] = wdf["dst_ip"].astype(str)
-
-    # Out-degree (packets sent per source IP)
+    # Host-level telemetry aggregations
     src_counts = wdf["_src_str"].value_counts()
     dst_counts = wdf["_dst_str"].value_counts()
+    bytes_src = wdf.groupby("_src_str")["payload_size"].sum() if "payload_size" in wdf.columns else pd.Series(dtype=float)
+    bytes_dst = wdf.groupby("_dst_str")["payload_size"].sum() if "payload_size" in wdf.columns else pd.Series(dtype=float)
+    syn_src = wdf.groupby("_src_str")["flag_syn"].sum() if "flag_syn" in wdf.columns else pd.Series(dtype=float)
+    ack_src = wdf.groupby("_src_str")["flag_ack"].sum() if "flag_ack" in wdf.columns else pd.Series(dtype=float)
+    rst_src = wdf.groupby("_src_str")["flag_rst"].sum() if "flag_rst" in wdf.columns else pd.Series(dtype=float)
+    unique_dsts_per_src = wdf.groupby("_src_str")["_dst_str"].nunique()
+    unique_srcs_per_dst = wdf.groupby("_dst_str")["_src_str"].nunique()
+    retrans_src = wdf.groupby("_src_str")["is_retransmission"].sum() if "is_retransmission" in wdf.columns else pd.Series(dtype=float)
+    win_src = wdf.groupby("_src_str")["tcp_window"].mean() if "tcp_window" in wdf.columns else pd.Series(dtype=float)
 
-    # Port entropy per source: groupby src → list of dst_ports → entropy
+    # Port entropy per source
     if "dst_port" in wdf.columns:
         port_entropy_per_src = (
             wdf.groupby("_src_str")["dst_port"]
@@ -216,7 +258,7 @@ def build_graph_for_window(
     else:
         port_entropy_per_src = pd.Series(dtype=float)
 
-    # TTL mean & variance per IP (both src and dst)
+    # TTL mean & variance per IP
     if "ttl" in wdf.columns:
         ttl_src = wdf.groupby("_src_str")["ttl"].agg(["mean", "var"])
         ttl_dst = wdf.groupby("_dst_str")["ttl"].agg(["mean", "var"])
@@ -240,13 +282,22 @@ def build_graph_for_window(
 
         is_priv = _is_private_ip(ip_str)
 
-        node_features[ip_id, 0] = math.log1p(out_deg)       # 0: log out-degree
-        node_features[ip_id, 1] = math.log1p(in_deg)        # 1: log in-degree
-        node_features[ip_id, 2] = port_ent                  # 2: dst port entropy
-        node_features[ip_id, 3] = ttl_mean / 255.0          # 3: normalised TTL
-        node_features[ip_id, 4] = math.log1p(max(ttl_var, 0.0))  # 4: TTL variance
-        node_features[ip_id, 5] = is_priv                   # 5: private network flag
-        # Dimensions 6-15: reserved for dynamic GRU node memory bank
+        node_features[ip_id, 0] = math.log1p(out_deg)                        # 0: log out-degree
+        node_features[ip_id, 1] = math.log1p(in_deg)                         # 1: log in-degree
+        node_features[ip_id, 2] = port_ent                                   # 2: dst port entropy
+        node_features[ip_id, 3] = ttl_mean / 255.0                           # 3: normalised TTL
+        node_features[ip_id, 4] = math.log1p(max(ttl_var, 0.0))             # 4: TTL variance
+        node_features[ip_id, 5] = is_priv                                    # 5: private network flag
+        node_features[ip_id, 6] = math.log1p(_safe_float(bytes_src.get(ip_str, 0.0))) # 6: log bytes sent
+        node_features[ip_id, 7] = math.log1p(_safe_float(bytes_dst.get(ip_str, 0.0))) # 7: log bytes received
+        node_features[ip_id, 8] = _safe_float(syn_src.get(ip_str, 0.0)) / max(out_deg, 1.0) # 8: SYN ratio sent
+        node_features[ip_id, 9] = _safe_float(ack_src.get(ip_str, 0.0)) / max(out_deg, 1.0) # 9: ACK ratio sent
+        node_features[ip_id, 10] = _safe_float(rst_src.get(ip_str, 0.0)) / max(out_deg, 1.0) # 10: RST ratio sent
+        node_features[ip_id, 11] = float(unique_dsts_per_src.get(ip_str, 0)) # 11: unique peers contacted (scanning)
+        node_features[ip_id, 12] = float(unique_srcs_per_dst.get(ip_str, 0)) # 12: unique peers received from
+        node_features[ip_id, 13] = _safe_float(bytes_src.get(ip_str, 0.0)) / max(out_deg, 1.0) / 1500.0 # 13: avg pkt size
+        node_features[ip_id, 14] = _safe_float(retrans_src.get(ip_str, 0.0)) / max(out_deg, 1.0) # 14: host retrans rate
+        node_features[ip_id, 15] = _safe_float(win_src.get(ip_str, 1024.0)) / 65535.0 # 15: norm TCP window
 
     x = torch.tensor(node_features, dtype=torch.float32)
 

@@ -36,7 +36,7 @@ class GNNEncoder(nn.Module):
     def __init__(
         self,
         node_in_dim: int = 16,
-        edge_in_dim: int = 12,
+        edge_in_dim: int = 16,
         hidden_dim: int = 64,
         out_dim: int = 64,
         num_heads: int = 4,

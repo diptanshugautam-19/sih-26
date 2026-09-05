@@ -37,7 +37,7 @@ class DynamicGATWithMemory(nn.Module):
     def __init__(
         self,
         node_feat_dim: int = 16,
-        edge_feat_dim: int = 12,
+        edge_feat_dim: int = 16,
         node_in_dim: int | None = None,
         edge_in_dim: int | None = None,
         memory_dim: int = 32,

@@ -24,7 +24,7 @@ class CyberDefenceWorldModel(nn.Module):
     def __init__(
         self,
         node_in_dim: int = 16,
-        edge_in_dim: int = 12,
+        edge_in_dim: int = 16,
         node_dim: int | None = None,
         edge_dim: int | None = None,
         memory_dim: int = 32,

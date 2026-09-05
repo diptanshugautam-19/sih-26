@@ -37,7 +37,7 @@ class TestGraphBuilder(unittest.TestCase):
         self.assertEqual(snapshot.edge_index.shape[1], 3)  # 3 distinct (src, dst) pairs
         self.assertEqual(snapshot.x.shape[0], 4)
         self.assertEqual(snapshot.x.shape[1], 16)
-        self.assertEqual(snapshot.edge_attr.shape[1], 12)
+        self.assertEqual(snapshot.edge_attr.shape[1], 16)
 
         # Grounded dynamics target check
         self.assertEqual(snapshot.grounded_dynamics.shape[0], 3)
