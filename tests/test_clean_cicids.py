@@ -35,8 +35,24 @@ class TestCleanCicids(unittest.TestCase):
         self.assertEqual(cleaned["label"].tolist(), ["Benign", "SSH-Bruteforce"])
         # Check deduplication dropped the duplicate row
         self.assertEqual(len(cleaned), 2)
-        # Check infinite value was sanitized
-        self.assertEqual(cleaned.iloc[1]["flow_byts_s"], 0.0)
+        # Check infinite value was imputed to peak burst rate (1000.0), NOT zeroed out to 0.0
+        self.assertEqual(cleaned.iloc[1]["flow_byts_s"], 1000.0)
+
+    def test_infinite_flow_bytes_imputed_with_percentile(self):
+        # 20 samples with flow rates, one infinite representing DoS burst
+        rates = [float(i * 100) for i in range(1, 20)] + ["inf"]
+        df_dos = pd.DataFrame({
+            "src_ip": ["10.0.0.1"] * 20,
+            "dst_ip": ["10.0.0.2"] * 20,
+            "dst_port": [80] * 20,
+            "protocol": [6] * 20,
+            "timestamp": [f"2026-09-01 10:00:{i:02d}" for i in range(20)],
+            "flow_byts_s": rates,
+        })
+        cleaned = clean_dataframe(df_dos)
+        inf_row_rate = cleaned.iloc[19]["flow_byts_s"]
+        # Must NOT be 0.0 — must be high burst value
+        self.assertGreater(inf_row_rate, 1500.0)
 
 
 if __name__ == "__main__":

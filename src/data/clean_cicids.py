@@ -87,12 +87,45 @@ def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
             "Please provide a telemetry dataset containing real 'src_ip' and 'dst_ip' fields."
         )
 
-    # Replace infinite values and common string representations of infinity
+    # Deliberate imputation for infinite values (e.g. Flow Bytes/s = inf from zero-duration flood packets)
+    # Blanket zeroing turns DoS/scan bursts into "no traffic" — the exact opposite of reality.
+    rate_cols = [c for c in ("flow_byts_s", "flow_pkts_s") if c in df.columns]
+    inf_masks = {}
+    for rc in rate_cols:
+        s = df[rc]
+        if s.dtype == object:
+            is_inf = s.astype(str).str.strip().isin(["inf", "-inf", "Infinity", "-Infinity"])
+        else:
+            is_inf = np.isinf(s)
+        inf_masks[rc] = is_inf
+
+    # Replace infinite values and common string representations of infinity with NaN
     df = df.replace([np.inf, -np.inf, "Infinity", "-Infinity", "inf", "-inf"], np.nan).infer_objects(copy=False)
 
-    # Convert numeric columns where possible
+    # Impute rate columns: inf entries get 99th percentile burst rate, remaining NaNs get median
+    for rc in rate_cols:
+        df[rc] = pd.to_numeric(df[rc], errors="coerce")
+        finite_vals = df[rc].dropna()
+        if not finite_vals.empty:
+            burst_val = float(finite_vals.quantile(0.99)) if len(finite_vals) > 10 else float(finite_vals.max())
+            if rc in inf_masks and inf_masks[rc].any():
+                df.loc[inf_masks[rc], rc] = burst_val
+            med_val = float(finite_vals.median())
+            df[rc] = df[rc].fillna(med_val)
+        else:
+            df[rc] = df[rc].fillna(0.0)
+
+    # Convert numeric columns: discrete flags/counters default to 0, continuous metrics default to median
     numeric_cols = df.select_dtypes(include=[np.number]).columns
-    df[numeric_cols] = df[numeric_cols].fillna(0.0)
+    for c in numeric_cols:
+        if c in rate_cols:
+            continue
+        if c.endswith("_cnt") or c.startswith("flag_") or c in ("src_port", "dst_port", "protocol"):
+            df[c] = df[c].fillna(0)
+        else:
+            finite_col = df[c].dropna()
+            med = float(finite_col.median()) if not finite_col.empty else 0.0
+            df[c] = df[c].fillna(med)
 
     # Parse timestamps
     if "timestamp" in df.columns:
