@@ -365,12 +365,16 @@ def make_dataloaders(
         ]
         sampler = WeightedRandomSampler(weights, num_samples=len(train_idx), replacement=True)
 
+    pin_memory = torch.cuda.is_available()
     train_dl = DataLoader(train_ds, batch_size=batch_size,
                           sampler=sampler, shuffle=(sampler is None),
-                          collate_fn=collate_sequences)
+                          collate_fn=collate_sequences,
+                          pin_memory=pin_memory)
     val_dl = DataLoader(val_ds, batch_size=batch_size, shuffle=False,
-                        collate_fn=collate_sequences)
+                        collate_fn=collate_sequences,
+                        pin_memory=pin_memory)
     test_dl = DataLoader(test_ds, batch_size=batch_size, shuffle=False,
-                         collate_fn=collate_sequences)
+                         collate_fn=collate_sequences,
+                         pin_memory=pin_memory)
     return train_dl, val_dl, test_dl
 

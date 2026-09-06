@@ -81,9 +81,16 @@ def mark_checklist_item(filename: str, checkpoint_tag: str, trained_date: str):
     CHECKLIST_PATH.write_text("\n".join(new_lines), encoding="utf-8")
 
 
-def train_single_dataset(csv_path: Path, epochs: int = 10, batch_size: int = 8, lr: float = 5e-4):
+def train_single_dataset(csv_path: Path, epochs: int = 10, batch_size: int = 32, lr: float = 5e-4):
     CHECKPOINTS_DIR.mkdir(parents=True, exist_ok=True)
     reg = load_registry()
+
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+        log.info(f"GPU Acceleration ACTIVE: {gpu_name} ({gpu_mem_gb:.2f} GB VRAM) | Batch Size: {batch_size}")
+    else:
+        log.warning(f"CUDA NOT available. Training on CPU with Batch Size: {batch_size}")
 
     log.info(f"Checking dataset: {csv_path.name} ...")
     file_sha256 = compute_sha256(csv_path)
@@ -164,6 +171,7 @@ def train_single_dataset(csv_path: Path, epochs: int = 10, batch_size: int = 8, 
         "trained_at": trained_date,
         "checkpoint_path": str(checkpoint_path.relative_to(REPO_ROOT)),
         "epochs": epochs,
+        "batch_size": batch_size,
         "num_sequences": len(dataset),
         "val_loss": float(history["val_loss"][-1]) if "val_loss" in history and history["val_loss"] else None
     }
@@ -172,13 +180,13 @@ def train_single_dataset(csv_path: Path, epochs: int = 10, batch_size: int = 8, 
     log.info(f"Successfully recorded {csv_path.name} in registry & checklist!")
 
 
-def train_all_in_folder(folder_path: Path, epochs: int = 5):
+def train_all_in_folder(folder_path: Path, epochs: int = 5, batch_size: int = 32):
     csv_files = sorted(list(folder_path.glob("*.csv")))
     log.info(f"Found {len(csv_files)} CSV datasets in {folder_path}")
     for idx, csv_file in enumerate(csv_files, 1):
         log.info(f"\n[{idx}/{len(csv_files)}] Processing {csv_file.name} ...")
         try:
-            train_single_dataset(csv_file, epochs=epochs)
+            train_single_dataset(csv_file, epochs=epochs, batch_size=batch_size)
         except Exception as e:
             log.error(f"Error training {csv_file.name}: {e}", exc_info=True)
 
@@ -188,10 +196,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("path", type=str, help="Path to traffic CSV or directory of CSVs")
     parser.add_argument("--epochs", type=int, default=5, help="Epochs to train per dataset")
+    parser.add_argument("--batch-size", type=int, default=None, help="Batch size (default: 32 on GPU, 64 with --max-vram, 8 on CPU)")
+    parser.add_argument("--max-vram", action="store_true", help="Maximize GPU VRAM utilization (uses batch size 64-128)")
     args = parser.parse_args()
     
+    # Auto-tune batch size for GPU/VRAM
+    if args.batch_size is not None:
+        effective_batch_size = args.batch_size
+    elif args.max_vram:
+        effective_batch_size = 64 if torch.cuda.is_available() else 8
+    else:
+        effective_batch_size = 32 if torch.cuda.is_available() else 8
+
     target_path = Path(args.path)
     if target_path.is_dir():
-        train_all_in_folder(target_path, epochs=args.epochs)
+        train_all_in_folder(target_path, epochs=args.epochs, batch_size=effective_batch_size)
     else:
-        train_single_dataset(target_path, epochs=args.epochs)
+        train_single_dataset(target_path, epochs=args.epochs, batch_size=effective_batch_size)

@@ -47,9 +47,10 @@ logger = logging.getLogger(__name__)
 
 def _snap_to_device(snap, device: torch.device):
     """Move NetworkGraphSnapshot tensor fields to the target device in-place-safe way."""
-    snap.x          = snap.x.to(device)
-    snap.edge_index = snap.edge_index.to(device)
-    snap.edge_attr  = snap.edge_attr.to(device)
+    non_blocking = (device.type == "cuda")
+    snap.x          = snap.x.to(device, non_blocking=non_blocking)
+    snap.edge_index = snap.edge_index.to(device, non_blocking=non_blocking)
+    snap.edge_attr  = snap.edge_attr.to(device, non_blocking=non_blocking)
     return snap
 
 
@@ -83,11 +84,12 @@ def _forward_batch(
     infil_pred    = torch.stack(all_preds["infiltration"], dim=0)      # [B, 1]
     stage_logits  = torch.stack(all_preds["stage_logits"], dim=0)      # [B, num_stages]
 
+    non_blocking = (device.type == "cuda")
     targets = {
-        "grounded": batch["grounded_targets"].to(device),              # [B, K, 3]
-        "infiltration": batch["infiltration_targets"].to(device),      # [B]
-        "stage": batch["stage_ids"].to(device),                        # [B]
-        "stage_conf": batch["stage_confs"].to(device),                 # [B]
+        "grounded": batch["grounded_targets"].to(device, non_blocking=non_blocking),              # [B, K, 3]
+        "infiltration": batch["infiltration_targets"].to(device, non_blocking=non_blocking),      # [B]
+        "stage": batch["stage_ids"].to(device, non_blocking=non_blocking),                        # [B]
+        "stage_conf": batch["stage_confs"].to(device, non_blocking=non_blocking),                 # [B]
     }
 
     return {
@@ -104,33 +106,46 @@ def train_epoch(
     loss_fn: UncertaintyWeightedMultiTaskLoss,
     device: torch.device,
     grad_clip: float = 1.0,
+    scaler: Optional[torch.amp.GradScaler] = None,
 ) -> Dict[str, float]:
     model.train()
     loss_fn.train()
     running = {k: 0.0 for k in ["loss_total", "loss_dynamics", "loss_infiltration", "loss_stage"]}
     n_batches = 0
+    use_amp = (device.type == "cuda")
 
     for batch in loader:
         optimizer.zero_grad()
 
-        preds, targets = _forward_batch(model, batch, device)
+        with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=use_amp):
+            preds, targets = _forward_batch(model, batch, device)
 
-        loss, breakdown = loss_fn(
-            grounded_pred=preds["grounded"],
-            grounded_target=targets["grounded"],
-            infil_pred=preds["infiltration"],
-            infil_target=targets["infiltration"],
-            stage_logits=preds["stage_logits"],
-            stage_target=targets["stage"],
-            stage_conf=targets["stage_conf"],
-        )
+            loss, breakdown = loss_fn(
+                grounded_pred=preds["grounded"],
+                grounded_target=targets["grounded"],
+                infil_pred=preds["infiltration"],
+                infil_target=targets["infiltration"],
+                stage_logits=preds["stage_logits"],
+                stage_target=targets["stage"],
+                stage_conf=targets["stage_conf"],
+            )
 
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(
-            list(model.parameters()) + list(loss_fn.parameters()),
-            max_norm=grad_clip
-        )
-        optimizer.step()
+        if scaler is not None and use_amp:
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(
+                list(model.parameters()) + list(loss_fn.parameters()),
+                max_norm=grad_clip
+            )
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                list(model.parameters()) + list(loss_fn.parameters()),
+                max_norm=grad_clip
+            )
+            optimizer.step()
 
         for k in running:
             running[k] += breakdown.get(k, 0.0)
@@ -151,21 +166,23 @@ def eval_epoch(
     loss_fn.eval()
     running = {k: 0.0 for k in ["loss_total", "loss_dynamics", "loss_infiltration", "loss_stage"]}
     n_batches = 0
+    use_amp = (device.type == "cuda")
 
     all_infil_preds, all_infil_targets, all_stage_preds, all_stage_targets = [], [], [], []
 
     for batch in loader:
-        preds, targets = _forward_batch(model, batch, device)
+        with torch.amp.autocast(device_type="cuda", dtype=torch.float16, enabled=use_amp):
+            preds, targets = _forward_batch(model, batch, device)
 
-        _, breakdown = loss_fn(
-            grounded_pred=preds["grounded"],
-            grounded_target=targets["grounded"],
-            infil_pred=preds["infiltration"],
-            infil_target=targets["infiltration"],
-            stage_logits=preds["stage_logits"],
-            stage_target=targets["stage"],
-            stage_conf=targets["stage_conf"],
-        )
+            _, breakdown = loss_fn(
+                grounded_pred=preds["grounded"],
+                grounded_target=targets["grounded"],
+                infil_pred=preds["infiltration"],
+                infil_target=targets["infiltration"],
+                stage_logits=preds["stage_logits"],
+                stage_target=targets["stage"],
+                stage_conf=targets["stage_conf"],
+            )
 
         for k in running:
             running[k] += breakdown.get(k, 0.0)
@@ -220,7 +237,15 @@ def train(
     else:
         device = torch.device(device_str)
 
-    logger.info(f"Training on device: {device}")
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+        scaler = torch.amp.GradScaler("cuda")
+        dev_name = torch.cuda.get_device_name(device)
+        total_vram_gb = torch.cuda.get_device_properties(device).total_memory / (1024 ** 3)
+        logger.info(f"CUDA enabled! GPU: {dev_name} ({total_vram_gb:.2f} GB VRAM) | cuDNN benchmark: True | AMP: True")
+    else:
+        scaler = None
+        logger.info(f"Training on device: {device}")
 
     # Report class imbalance
     report = dataset.imbalance_report()
@@ -253,13 +278,17 @@ def train(
 
     print(f"\n{'='*60}")
     print(f"  Cyber Defence World Model -- Training")
-    print(f"  Device: {device} | Epochs: {num_epochs} | Batch: {batch_size}")
+    if device.type == "cuda":
+        print(f"  Device: {device} ({torch.cuda.get_device_name(device)}) | VRAM: {total_vram_gb:.2f} GB")
+    else:
+        print(f"  Device: {device}")
+    print(f"  Epochs: {num_epochs} | Batch: {batch_size} | AMP: {device.type == 'cuda'}")
     print(f"  Sequences: {len(dataset)} (Train: {len(train_dl.dataset)}, Val: {len(val_dl.dataset)}, Test: {len(test_dl.dataset)})")
     print(f"{'='*60}\n")
 
     for epoch in range(1, num_epochs + 1):
         t0 = time.time()
-        train_losses = train_epoch(model, train_dl, optimizer, loss_fn, device)
+        train_losses = train_epoch(model, train_dl, optimizer, loss_fn, device, scaler=scaler)
         val_losses, val_raw = eval_epoch(model, val_dl, loss_fn, device)
         scheduler.step()
 
@@ -278,6 +307,12 @@ def train(
         else:
             val_infil_f1 = 0.0
 
+        vram_stat = ""
+        if device.type == "cuda":
+            alloc_mb = torch.cuda.memory_allocated(device) / (1024 * 1024)
+            peak_mb = torch.cuda.max_memory_allocated(device) / (1024 * 1024)
+            vram_stat = f" | VRAM: {alloc_mb:.0f}MB (Peak {peak_mb:.0f}MB)"
+
         row = {
             "epoch": epoch,
             **{f"train_{k}": v for k, v in train_losses.items()},
@@ -294,7 +329,7 @@ def train(
             f"Val Loss: {val_loss:.4f} | "
             f"Val Infil F1: {val_infil_f1:.3f} | "
             f"LR: {scheduler.get_last_lr()[0]:.2e} | "
-            f"Time: {elapsed:.1f}s"
+            f"Time: {elapsed:.1f}s{vram_stat}"
         )
 
         # Save latest checkpoint every epoch

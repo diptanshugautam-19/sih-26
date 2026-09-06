@@ -216,9 +216,9 @@ def build_graph_for_window(
             ttl_std,                                          # 9: ttl std
             win_mean,                                         # 10: mean win
             is_internal,                                      # 11: internal private IP flag
-            iat_mean,                                         # 12: IAT mean (brief req)
-            iat_std,                                          # 13: IAT std (brief req)
-            iat_max,                                          # 14: IAT max (brief req)
+            min(max(iat_mean, 0.0), 60.0),                    # 12: IAT mean (brief req)
+            min(max(iat_std, 0.0), 60.0),                     # 13: IAT std (brief req)
+            min(max(iat_max, 0.0), 60.0),                     # 14: IAT max (brief req)
             bidi_ratio,                                       # 15: bidirectional flow ratio (brief req)
         ]
         edge_features_list.append(feat)

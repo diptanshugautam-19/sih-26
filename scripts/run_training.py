@@ -42,70 +42,104 @@ def main():
     parser = argparse.ArgumentParser(description="Train the Cyber Defence World Model end-to-end.")
     parser.add_argument("csv_path",       help="Path to CIC-IDS2018 or CTU-13 CSV file")
     parser.add_argument("--epochs",       type=int,   default=25,    help="Training epochs (default: 25)")
-    parser.add_argument("--batch-size",   type=int,   default=8,     help="Batch size (default: 8)")
+    parser.add_argument("--batch-size",   type=int,   default=None,  help="Batch size (default: 32 on GPU, 8 on CPU)")
+    parser.add_argument("--max-vram",     action="store_true",        help="Maximize VRAM utilization (uses batch size 64-128)")
     parser.add_argument("--lr",           type=float, default=5e-4,  help="Learning rate (default: 5e-4)")
     parser.add_argument("--device",       default="auto",            help="auto | cpu | cuda (default: auto)")
     parser.add_argument("--checkpoint-dir", default="models",       help="Where to save .pt files")
     parser.add_argument("--seed",         type=int,   default=42)
+    parser.add_argument("--nvd",          action="store_true",        help="Enable NVD vulnerability enrichment")
     parser.add_argument("--max-rows",     type=int,   default=None,  help="Limit rows for quick smoke test")
     args = parser.parse_args()
+
+    if args.batch_size is not None:
+        batch_size = args.batch_size
+    elif args.max_vram:
+        batch_size = 64 if torch.cuda.is_available() else 8
+    else:
+        batch_size = 32 if torch.cuda.is_available() else 8
+    args.batch_size = batch_size
 
     csv_path = Path(args.csv_path)
     if not csv_path.exists():
         log.error(f"File not found: {csv_path}")
         sys.exit(1)
 
-    # ──────────────────────────────────────────────
-    # STEP 1 — Load & clean
-    # ──────────────────────────────────────────────
-    log.info(f"📂 Loading {csv_path.name} ...")
-    df = pd.read_csv(csv_path, low_memory=False, nrows=args.max_rows)
-    log.info(f"   Loaded {len(df):,} rows × {len(df.columns)} columns")
+    # Check for processed dataset cache
+    cache_dir = Path("data/processed")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_stem = f"dataset_{csv_path.stem}" + ("_nvd" if args.nvd else "")
+    matching_caches = list(cache_dir.glob(f"{cache_stem}*.pt"))
 
-    from src.data.clean_cicids import clean_dataframe
-    df = clean_dataframe(df)
-    log.info(f"   After cleaning: {len(df):,} rows")
+    dataset = None
+    if matching_caches and args.max_rows is None:
+        cache_path = matching_caches[0]
+        log.info(f"⚡ [CACHE HIT] Found preprocessed dataset cache: {cache_path}")
+        t0 = time.time()
+        dataset = torch.load(cache_path, weights_only=False)
+        log.info(f"   Loaded {len(dataset):,} graph sequences in {time.time() - t0:.2f}s!")
 
-    # ──────────────────────────────────────────────
-    # STEP 2 — Convert timestamp to Unix float
-    # ──────────────────────────────────────────────
-    if "timestamp" in df.columns:
-        if pd.api.types.is_datetime64_any_dtype(df["timestamp"]):
-            df["timestamp"] = df["timestamp"].astype(np.int64) / 1e9
-        elif df["timestamp"].dtype == object:
-            df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-            df = df.dropna(subset=["timestamp"])
-            df["timestamp"] = df["timestamp"].astype(np.int64) / 1e9
+    if dataset is None:
+        # ──────────────────────────────────────────────
+        # STEP 1 — Load & clean
+        # ──────────────────────────────────────────────
+        log.info(f"📂 Loading {csv_path.name} ...")
+        df = pd.read_csv(csv_path, low_memory=False, nrows=args.max_rows)
+        log.info(f"   Loaded {len(df):,} rows × {len(df.columns)} columns")
+
+        from src.data.clean_cicids import clean_dataframe
+        df = clean_dataframe(df)
+        log.info(f"   After cleaning: {len(df):,} rows")
+
+        # ──────────────────────────────────────────────
+        # STEP 2 — Convert timestamp to Unix float
+        # ──────────────────────────────────────────────
+        if "timestamp" in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df["timestamp"]):
+                df["timestamp"] = df["timestamp"].astype(np.int64) / 1e9
+            elif df["timestamp"].dtype == object:
+                df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+                df = df.dropna(subset=["timestamp"])
+                df["timestamp"] = df["timestamp"].astype(np.int64) / 1e9
+        else:
+            log.error("No 'timestamp' column found. Aborting.")
+            sys.exit(1)
+
+        log.info(f"   Time range: {df['timestamp'].min():.1f} → {df['timestamp'].max():.1f} ({(df['timestamp'].max() - df['timestamp'].min()):.1f}s)")
+
+        # ──────────────────────────────────────────────
+        # STEP 3 — Add pseudo-MITRE labels
+        # ──────────────────────────────────────────────
+        log.info("🏷️  Annotating with pseudo-MITRE labels ...")
+        from src.labels.pseudo_labeler import annotate_dataframe_with_pseudo_labels
+        df = annotate_dataframe_with_pseudo_labels(df)
+        mal_pct = (df["mitre_stage_id"] > 0).mean() * 100
+        log.info(f"   Malicious traffic: {mal_pct:.1f}%")
+
+        # ──────────────────────────────────────────────
+        # STEP 4 — Build PyTorch dataset
+        # ──────────────────────────────────────────────
+        log.info("🔨 Building graph-sequence dataset (this may take 30–120 seconds) ...")
+        t0 = time.time()
+        from src.data.dataset import CyberDefenceDataset
+        from src.data.windowing import WindowConfig
+
+        cfg = WindowConfig(window_size=5.0, stride=2.5, seq_len=10, horizon_k=4)
+        dataset = CyberDefenceDataset(df, cfg=cfg)
+        elapsed = time.time() - t0
+
+        report = dataset.imbalance_report()
+        log.info(f"   Built {report['total_sequences']} sequences in {elapsed:.1f}s")
+        log.info(f"   Malicious sequences: {report['malicious']} ({report['malicious_pct']:.1f}%)")
+
+        # Cache dataset for instant future training
+        if args.max_rows is None:
+            save_path = cache_dir / f"{cache_stem}.pt"
+            torch.save(dataset, save_path)
+            log.info(f"💾 Saved preprocessed dataset to cache: {save_path} ({save_path.stat().st_size / (1024*1024):.1f} MB)")
     else:
-        log.error("No 'timestamp' column found. Aborting.")
-        sys.exit(1)
-
-    log.info(f"   Time range: {df['timestamp'].min():.1f} → {df['timestamp'].max():.1f} ({(df['timestamp'].max() - df['timestamp'].min()):.1f}s)")
-
-    # ──────────────────────────────────────────────
-    # STEP 3 — Add pseudo-MITRE labels
-    # ──────────────────────────────────────────────
-    log.info("🏷️  Annotating with pseudo-MITRE labels ...")
-    from src.labels.pseudo_labeler import annotate_dataframe_with_pseudo_labels
-    df = annotate_dataframe_with_pseudo_labels(df)
-    mal_pct = (df["mitre_stage_id"] > 0).mean() * 100
-    log.info(f"   Malicious traffic: {mal_pct:.1f}%")
-
-    # ──────────────────────────────────────────────
-    # STEP 4 — Build PyTorch dataset
-    # ──────────────────────────────────────────────
-    log.info("🔨 Building graph-sequence dataset (this may take 30–120 seconds) ...")
-    t0 = time.time()
-    from src.data.dataset import CyberDefenceDataset
-    from src.data.windowing import WindowConfig
-
-    cfg = WindowConfig(window_size=5.0, stride=2.5, seq_len=10, horizon_k=4)
-    dataset = CyberDefenceDataset(df, cfg=cfg)
-    elapsed = time.time() - t0
-
-    report = dataset.imbalance_report()
-    log.info(f"   Built {report['total_sequences']} sequences in {elapsed:.1f}s")
-    log.info(f"   Malicious sequences: {report['malicious']} ({report['malicious_pct']:.1f}%)")
+        # Dummy df for baseline evaluation split
+        df = pd.DataFrame()
 
     if len(dataset) < 10:
         log.warning(
@@ -146,20 +180,22 @@ def main():
     # ──────────────────────────────────────────────
     # STEP 7 — Train & Evaluate Logistic Baseline
     # ──────────────────────────────────────────────
-    log.info("📉 Training Logistic Regression baseline ...")
-    from src.models.baselines.logistic import PerFlowLogisticBaseline
+    lr_report = {}
+    if not df.empty and len(df) > 100:
+        log.info("📉 Training Logistic Regression baseline ...")
+        from src.models.baselines.logistic import PerFlowLogisticBaseline
 
-    # Use same 70/15/15 split by index (deterministic)
-    rng = np.random.default_rng(args.seed)
-    idx = rng.permutation(len(df))
-    n_train = int(0.7 * len(df))
-    n_val   = int(0.15 * len(df))
-    train_df = df.iloc[idx[:n_train]].copy()
-    test_df  = df.iloc[idx[n_train + n_val:]].copy()
+        # Use same 70/15/15 split by index (deterministic)
+        rng = np.random.default_rng(args.seed)
+        idx = rng.permutation(len(df))
+        n_train = int(0.7 * len(df))
+        n_val   = int(0.15 * len(df))
+        train_df = df.iloc[idx[:n_train]].copy()
+        test_df  = df.iloc[idx[n_train + n_val:]].copy()
 
-    lr_model = PerFlowLogisticBaseline(seed=args.seed)
-    lr_model.fit(train_df)
-    lr_report = lr_model.evaluate(test_df)
+        lr_model = PerFlowLogisticBaseline(seed=args.seed)
+        lr_model.fit(train_df)
+        lr_report = lr_model.evaluate(test_df)
 
     # ──────────────────────────────────────────────
     # STEP 8 — Print Benchmark Table

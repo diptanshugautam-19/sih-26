@@ -81,6 +81,30 @@
       "epochs": 5,
       "num_sequences": 33,
       "val_loss": null
+    },
+    "ciciot2023_iot_full_benchmark": {
+      "dataset_name": "CIC-IoT-2023",
+      "file_path": "C:\\Users\\raova\\OneDrive\\Desktop\\SIH TRAINING DATA\\CICIOT23\\train\\train.csv",
+      "trained_at": "2026-09-07 01:23:51",
+      "checkpoint_path": "models\\checkpoints\\worldmodel_ciciot23.pt",
+      "epochs": 25,
+      "best_val_loss": 0.0815,
+      "best_val_f1": 1.0,
+      "test_f1": 1.0,
+      "test_precision": 1.0,
+      "test_recall": 1.0
+    },
+    "ctu_idseval_6_complete_benchmark": {
+      "dataset_name": "CTU-IDSEVAL-6 (CTU-13)",
+      "file_path": "C:\\Users\\raova\\OneDrive\\Desktop\\SIH TRAINING DATA\\21027042",
+      "trained_at": "2026-09-07 02:03:12",
+      "checkpoint_path": "models\\checkpoints\\worldmodel_ctu_idseval.pt",
+      "epochs": 25,
+      "best_val_loss": 0.2518,
+      "best_val_f1": 1.0,
+      "test_f1": 1.0,
+      "test_precision": 1.0,
+      "test_recall": 1.0
     }
   }
 }
