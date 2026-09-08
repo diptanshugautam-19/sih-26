@@ -7,15 +7,8 @@ import { ExplainabilitySection } from './components/ExplainabilitySection';
 import { MainThreatTopologyView } from './components/MainThreatTopologyView';
 import { CaptureUploadModal } from './components/CaptureUploadModal';
 import { CaptureUtilityBar } from './components/CaptureUtilityBar';
-import {
-  INITIAL_HOSTS,
-  INITIAL_EDGES,
-  FORECAST_POINTS,
-  INITIAL_SIMULATIONS,
-  KILL_CHAIN_STAGES,
-  INITIAL_ALERTS,
-  getExplainabilityForEdge
-} from './data/initialData';
+import { ModelBenchmarksView } from './components/ModelBenchmarksView';
+import { LoginPage } from './components/LoginPage';
 import {
   DefenceActionType,
   SimulationRecord,
@@ -28,7 +21,8 @@ import {
   AppTheme,
   ForecastPoint,
   KillChainStage,
-  SourceExplainabilityProfile
+  SourceExplainabilityProfile,
+  AuthUser
 } from './types';
 import { playCyberTone } from './utils/audio';
 import {
@@ -45,6 +39,28 @@ import {
 } from './utils/api';
 
 export default function App() {
+  // Authentication: Operator Login session (persisted in localStorage)
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => {
+    try {
+      const stored = localStorage.getItem('vashikaran_user');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('vashikaran_user');
+    } catch {
+      // ignore
+    }
+    setAuthUser(null);
+  };
+
   // Navigation: separates clustered single-page layout into multi-page workflow
   const [activeTab, setActiveTab] = useState<NavigationTab>('main_topology');
 
@@ -85,51 +101,51 @@ export default function App() {
   }, [theme]);
 
   // Telemetry controls
-  const [windowSeq, setWindowSeq] = useState(842);
+  const [windowSeq, setWindowSeq] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [alerts, setAlerts] = useState<TelemetryAlert[]>(INITIAL_ALERTS);
+  const [alerts, setAlerts] = useState<TelemetryAlert[]>([]);
 
-  // Core Network State (fetched from backend)
-  const [hosts, setHosts] = useState<NetworkHost[]>(INITIAL_HOSTS);
-  const [edges, setEdges] = useState<NetworkEdge[]>(INITIAL_EDGES);
+  // Core Network State (strictly fetched from backend /api/network)
+  const [hosts, setHosts] = useState<NetworkHost[]>([]);
+  const [edges, setEdges] = useState<NetworkEdge[]>([]);
   const [attackedNodes, setAttackedNodes] = useState<NetworkHost[]>([]);
   const [predictedNextTarget, setPredictedNextTarget] = useState<PredictedTargetNode | null>(null);
   const [isolatedHostIds, setIsolatedHostIds] = useState<string[]>([]);
   const [blockedPorts, setBlockedPorts] = useState<{ [hostId: string]: number[] }>({});
 
   // Active selections
-  const [selectedHostId, setSelectedHostId] = useState('srv-dc01');
-  const [selectedEdge, setSelectedEdge] = useState<NetworkEdge>(INITIAL_EDGES[1]);
-  const [activeProfile, setActiveProfile] = useState<SourceExplainabilityProfile>(() => getExplainabilityForEdge(INITIAL_EDGES[1]));
+  const [selectedHostId, setSelectedHostId] = useState('');
+  const [selectedEdge, setSelectedEdge] = useState<NetworkEdge | null>(null);
+  const [activeProfile, setActiveProfile] = useState<SourceExplainabilityProfile | null>(null);
 
-  // Model Intelligence & KPI metrics
-  const [infiltrationRisk, setInfiltrationRisk] = useState(activeProfile.riskScore);
-  const [riskTrend, setRiskTrend] = useState(activeProfile.riskTrend);
-  const [leadTime, setLeadTime] = useState(activeProfile.leadTime);
-  const [leadTimeDelta, setLeadTimeDelta] = useState(activeProfile.leadTimeDelta);
-  const [predictedStage, setPredictedStage] = useState(activeProfile.predictedStage);
-  const [mitreTactic, setMitreTactic] = useState(activeProfile.mitreTactic);
-  const [modelConfidence, setModelConfidence] = useState(94.2);
-  const [uncertainty, setUncertainty] = useState(5.8);
+  // Model Intelligence & KPI metrics (fetched from backend /api/telemetry)
+  const [infiltrationRisk, setInfiltrationRisk] = useState(0);
+  const [riskTrend, setRiskTrend] = useState('0');
+  const [leadTime, setLeadTime] = useState('--');
+  const [leadTimeDelta, setLeadTimeDelta] = useState('--');
+  const [predictedStage, setPredictedStage] = useState('Initializing...');
+  const [mitreTactic, setMitreTactic] = useState('Scanning...');
+  const [modelConfidence, setModelConfidence] = useState(0);
+  const [uncertainty, setUncertainty] = useState(0);
 
-  // Telemetry sensor metrics
-  const [portEntropy, setPortEntropy] = useState(activeProfile.portEntropy);
-  const [synRatio, setSynRatio] = useState(activeProfile.synRatio);
-  const [logByteVolume, setLogByteVolume] = useState(activeProfile.logByteVolume);
+  // Telemetry sensor metrics (fetched from backend /api/telemetry & /api/forecast)
+  const [portEntropy, setPortEntropy] = useState(0);
+  const [synRatio, setSynRatio] = useState(0);
+  const [logByteVolume, setLogByteVolume] = useState(0);
 
-  // Trajectory forecast & Kill chain stages (fetched from backend)
-  const [forecastPoints, setForecastPoints] = useState<ForecastPoint[]>(FORECAST_POINTS);
-  const [killChainStages, setKillChainStages] = useState<KillChainStage[]>(KILL_CHAIN_STAGES);
+  // Trajectory forecast & Kill chain stages (fetched from backend /api/forecast)
+  const [forecastPoints, setForecastPoints] = useState<ForecastPoint[]>([]);
+  const [killChainStages, setKillChainStages] = useState<KillChainStage[]>([]);
 
   // What-If & Counterfactual simulation state
-  const [selectedTargetHostId, setSelectedTargetHostId] = useState('srv-dc01');
+  const [selectedTargetHostId, setSelectedTargetHostId] = useState('');
   const [actionType, setActionType] = useState<DefenceActionType>('isolate_host');
   const [selectedPort, setSelectedPort] = useState(445);
   const [isSimulating, setIsSimulating] = useState(false);
-  const [simulatedRisk, setSimulatedRisk] = useState(12);
-  const [deltaPts, setDeltaPts] = useState(75);
-  const [recentSimulations, setRecentSimulations] = useState<SimulationRecord[]>(INITIAL_SIMULATIONS);
+  const [simulatedRisk, setSimulatedRisk] = useState(0);
+  const [deltaPts, setDeltaPts] = useState(0);
+  const [recentSimulations, setRecentSimulations] = useState<SimulationRecord[]>([]);
   const [showCounterfactualInForecast, setShowCounterfactualInForecast] = useState(true);
 
   // Load live data from real Express backend
@@ -137,49 +153,66 @@ export default function App() {
     try {
       setIsRefreshing(true);
       const networkData = await fetchNetworkState();
-      setHosts(networkData.hosts);
-      setEdges(networkData.edges);
-      setAttackedNodes(networkData.attackedNodes);
-      setPredictedNextTarget(networkData.predictedNextTarget);
+      setHosts(networkData.hosts || []);
+      setEdges(networkData.edges || []);
+      setAttackedNodes(networkData.attackedNodes || []);
+      setPredictedNextTarget(networkData.predictedNextTarget || null);
       setIsolatedHostIds(networkData.isolatedHostIds || []);
       setBlockedPorts(networkData.blockedPorts || {});
-      setWindowSeq(networkData.windowSeq);
+      setWindowSeq(networkData.windowSeq || 0);
       setActiveCapture(networkData.activeCapture || null);
       setBackendConnected(true);
 
-      // Fetch telemetry
-      const tel = await fetchTelemetry();
-      setInfiltrationRisk(tel.infiltrationRisk);
-      setRiskTrend(tel.riskTrend);
-      setLeadTime(tel.leadTime);
-      setLeadTimeDelta(tel.leadTimeDelta);
-      setPredictedStage(tel.predictedStage);
-      setMitreTactic(tel.mitreTactic);
-      setPortEntropy(tel.portEntropy);
-      setSynRatio(tel.synRatio);
-      setLogByteVolume(tel.logByteVolume);
+      // Select initial host and edge from live backend data if not already set
+      if (networkData.hosts && networkData.hosts.length > 0) {
+        setSelectedHostId((prev) => prev || networkData.hosts[0].id);
+        setSelectedTargetHostId((prev) => prev || networkData.hosts[0].id);
+      }
+      const initialEdge = networkData.edges && networkData.edges.length > 1
+        ? networkData.edges[1]
+        : networkData.edges && networkData.edges.length > 0
+        ? networkData.edges[0]
+        : null;
 
-      // Fetch alerts
+      if (!selectedEdge && initialEdge) {
+        setSelectedEdge(initialEdge);
+      }
+
+      // Fetch telemetry from backend
+      const tel = await fetchTelemetry();
+      setInfiltrationRisk(tel.infiltrationRisk ?? 0);
+      setRiskTrend(tel.riskTrend ?? '0');
+      setLeadTime(tel.leadTime ?? '--');
+      setLeadTimeDelta(tel.leadTimeDelta ?? '--');
+      setPredictedStage(tel.predictedStage ?? '');
+      setMitreTactic(tel.mitreTactic ?? '');
+      setModelConfidence(tel.modelConfidence ?? 94.2);
+      setUncertainty(tel.uncertainty ?? 5.8);
+      setPortEntropy(tel.portEntropy ?? 0);
+      setSynRatio(tel.synRatio ?? 0);
+      setLogByteVolume(tel.logByteVolume ?? 0);
+
+      // Fetch alerts from backend
       const altData = await fetchAlerts();
-      if (altData && altData.length > 0) {
+      if (altData) {
         setAlerts(altData);
       }
 
       // Fetch forecast and kill chain progression from backend
       const fcData = await fetchForecast().catch(() => null);
       if (fcData) {
-        setForecastPoints(fcData.points);
-        setKillChainStages(fcData.killChainStages);
+        setForecastPoints(fcData.points || []);
+        setKillChainStages(fcData.killChainStages || []);
       }
 
       // Fetch simulations history from backend
       const simData = await fetchSimulations().catch(() => null);
-      if (simData && simData.length > 0) {
+      if (simData) {
         setRecentSimulations(simData);
       }
 
       // Fetch explainability for currently selected edge from backend
-      const currentEdgeId = selectedEdge ? selectedEdge.id : (networkData.edges[0]?.id);
+      const currentEdgeId = selectedEdge ? selectedEdge.id : initialEdge?.id;
       if (currentEdgeId) {
         const expData = await fetchExplainability(currentEdgeId).catch(() => null);
         if (expData) {
@@ -187,9 +220,8 @@ export default function App() {
         }
       }
     } catch (err) {
-      console.warn('Backend loading attempt, using active fallback state:', err);
-      // Even in fallback, populate attacked nodes & predicted target
-      setAttackedNodes(INITIAL_HOSTS.filter((h) => h.status === 'compromised'));
+      console.warn('Backend loading attempt failed:', err);
+      setBackendConnected(false);
     } finally {
       setIsRefreshing(false);
     }
@@ -230,9 +262,8 @@ export default function App() {
         setSynRatio(expData.synRatio);
         setLogByteVolume(expData.logByteVolume);
       }
-    } catch {
-      const profile = getExplainabilityForEdge(edge);
-      setActiveProfile(profile);
+    } catch (err) {
+      console.error('Failed to fetch explainability for edge:', err);
     }
   };
 
@@ -334,6 +365,18 @@ export default function App() {
   const isLight = theme === 'light';
   const isMidnight = theme === 'midnight';
 
+  // If operator is not authenticated, display the SOC Login Portal
+  if (!authUser) {
+    return (
+      <LoginPage
+        onLoginSuccess={(user) => setAuthUser(user)}
+        theme={theme}
+        onSelectTheme={handleSelectTheme}
+        soundEnabled={soundEnabled}
+      />
+    );
+  }
+
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${
       isLight
@@ -360,6 +403,8 @@ export default function App() {
         onOpenUploadModal={() => setIsUploadModalOpen(true)}
         theme={theme}
         onSelectTheme={handleSelectTheme}
+        currentUser={authUser}
+        onLogout={handleLogout}
       />
 
       {/* Main Page Area: Shifted down gracefully with generous presentable spacing */}
@@ -377,7 +422,7 @@ export default function App() {
               setSelectedHostId(id);
               setSelectedTargetHostId(id);
             }}
-            selectedEdgeId={selectedEdge.id}
+            selectedEdgeId={selectedEdge ? selectedEdge.id : ''}
             onSelectEdge={handleSelectEdge}
             isolatedHostIds={isolatedHostIds}
             blockedPorts={blockedPorts}
@@ -482,7 +527,7 @@ export default function App() {
             />
 
             <ExplainabilitySection
-              features={activeProfile.features}
+              features={activeProfile?.features || []}
               profile={activeProfile}
               edges={edges}
               selectedEdge={selectedEdge}
@@ -492,6 +537,14 @@ export default function App() {
               theme={theme}
             />
           </div>
+        )}
+
+        {/* VIEW 5: MODEL BENCHMARKS & FASTAPI INFERENCE CONTRACTS */}
+        {activeTab === 'benchmarks' && (
+          <ModelBenchmarksView
+            theme={theme}
+            soundEnabled={soundEnabled}
+          />
         )}
 
       </main>
