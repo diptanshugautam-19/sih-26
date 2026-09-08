@@ -15,6 +15,7 @@ interface TopologyGraphProps {
   onIsolateToggle: (hostId: string) => void;
   soundEnabled: boolean;
   theme?: AppTheme;
+  predictedTargetId?: string;
 }
 
 export const TopologyGraph: React.FC<TopologyGraphProps> = ({
@@ -28,7 +29,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
   blockedPorts,
   onIsolateToggle,
   soundEnabled,
-  theme = 'light'
+  theme = 'light',
+  predictedTargetId
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'high_attention' | 'corporate' | 'dmz'>('all');
@@ -87,6 +89,17 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
   };
 
   const getFriendlyHostInfo = (host: NetworkHost) => {
+    // If this host is the active predicted target from the World Model
+    if (predictedTargetId && host.id === predictedTargetId) {
+      return {
+        title: host.name,
+        roleDesc: `${host.role} (${host.segment.toUpperCase()}) · OS: ${host.os}`,
+        status: '⚠️ IN IMMEDIATE DANGER',
+        statusColor: '#fbbf24',
+        bgStatus: isLight ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+      };
+    }
+
     switch (host.id) {
       case 'srv-dc01':
         return {
@@ -190,7 +203,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
 
         <div className="flex items-center space-x-2">
           <div className="px-2.5 py-1 rounded bg-rose-500/10 border border-rose-500/40 text-rose-500 text-xs font-mono font-bold tracking-wider">
-            ATTENTION 0.92
+            ATTENTION {(edges.length > 0 ? Math.max(...edges.map((e) => e.attention)) : 0.92).toFixed(2)}
           </div>
           <button
             onClick={() => {
@@ -418,7 +431,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
             const isIsolated = isolatedHostIds.includes(host.id);
             const isMatching = filteredHosts.some((h) => h.id === host.id);
             const isC2 = host.id === 'c2-ext' || host.role?.toLowerCase().includes('adversary') || host.role?.toLowerCase().includes('attacker') || host.id.includes('c2') || host.id.includes('expl');
-            const isTarget = host.status === 'targeted' || host.id === 'srv-dc01';
+            const isTarget = host.status === 'targeted' || (predictedTargetId ? host.id === predictedTargetId : host.id === 'srv-dc01');
             const isCompromised = host.status === 'compromised';
             const friendly = getFriendlyHostInfo(host);
 
