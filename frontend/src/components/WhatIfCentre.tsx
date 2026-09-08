@@ -6,13 +6,13 @@ import {
   Zap,
   ChevronDown,
   Clock,
-  ArrowDownRight,
   ShieldCheck,
   CheckCircle2,
   Sliders,
-  Send
+  Server,
+  ShieldAlert
 } from 'lucide-react';
-import { NetworkHost, DefenceActionType, SimulationRecord } from '../types';
+import { NetworkHost, DefenceActionType, SimulationRecord, AppTheme } from '../types';
 import { playCyberTone } from '../utils/audio';
 
 interface WhatIfCentreProps {
@@ -25,13 +25,14 @@ interface WhatIfCentreProps {
   onSelectPort: (port: number) => void;
   onRunSimulation: () => void;
   isSimulating: boolean;
-  currentThreatRisk: number | null;
-  simulatedRisk: number | null;
-  deltaPts: number | null;
+  currentThreatRisk: number;
+  simulatedRisk: number;
+  deltaPts: number;
   recentSimulations: SimulationRecord[];
   onSelectSimulation: (sim: SimulationRecord) => void;
   onDeployPolicy: () => void;
   soundEnabled: boolean;
+  theme?: AppTheme;
 }
 
 export const WhatIfCentre: React.FC<WhatIfCentreProps> = ({
@@ -50,12 +51,16 @@ export const WhatIfCentre: React.FC<WhatIfCentreProps> = ({
   recentSimulations,
   onSelectSimulation,
   onDeployPolicy,
-  soundEnabled
+  soundEnabled,
+  theme = 'light'
 }) => {
   const [showHostDropdown, setShowHostDropdown] = useState(false);
   const [showDeploySuccess, setShowDeploySuccess] = useState(false);
 
-  const selectedHost = hosts.find((h) => h.id === selectedTargetHostId) || hosts[0] || null;
+  const isLight = theme === 'light';
+  const isMidnight = theme === 'midnight';
+
+  const selectedHost = hosts.find((h) => h.id === selectedTargetHostId) || hosts[0];
 
   const handleDeploy = () => {
     if (soundEnabled) playCyberTone('success');
@@ -65,273 +70,421 @@ export const WhatIfCentre: React.FC<WhatIfCentreProps> = ({
   };
 
   return (
-    <div className="flex flex-col rounded-xl border border-[#142d54] bg-[#061126]/90 overflow-hidden backdrop-blur-md">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-[#12284c] bg-[#08152e]/70">
-        <div>
-          <div className="text-[11px] font-mono tracking-wider text-slate-400">
-            03 <span className="text-slate-600">/</span> COUNTERFACTUAL
-          </div>
-          <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-            What-if centre
-          </h3>
-        </div>
-
-        <div className="px-2.5 py-1 rounded bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold tracking-wider shadow-[0_0_10px_rgba(6,182,212,0.2)]">
-          SUB-50MS SIM
-        </div>
-      </div>
-
-      {/* Hero simulation prompt banner */}
-      <div className="p-4 bg-[#07152f]/50 border-b border-[#102447] flex items-start space-x-3.5">
-        <div className="p-2 rounded-lg border border-cyan-500/30 bg-cyan-950/30 text-cyan-400 shrink-0">
-          <GitFork className="w-5 h-5" />
-        </div>
-        <div className="space-y-0.5">
-          <h4 className="text-xs sm:text-sm font-bold text-slate-100 font-sans">
-            Test a defence before deploying it
-          </h4>
-          <p className="text-[11px] font-mono text-slate-400 leading-snug">
-            Modify the cached graph sequence in memory.
-          </p>
-        </div>
-      </div>
-
-      {/* Main control form */}
-      <div className="p-4 sm:p-5 space-y-4">
-        {/* DEFENCE ACTION Selector */}
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-mono tracking-wider text-slate-400 uppercase font-semibold">
-            Defence Action
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => {
-                if (soundEnabled) playCyberTone('click');
-                onChangeActionType('isolate_host');
-              }}
-              className={`flex items-center justify-center space-x-2 py-2 px-3 rounded-lg border text-xs font-mono font-medium transition-all ${
-                actionType === 'isolate_host'
-                  ? 'border-cyan-400 bg-cyan-950/40 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
-                  : 'border-[#142d54] bg-[#071329] text-slate-400 hover:text-slate-200 hover:border-[#1e447d]'
-              }`}
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span>Isolate host</span>
-            </button>
-
-            <button
-              onClick={() => {
-                if (soundEnabled) playCyberTone('click');
-                onChangeActionType('block_port');
-              }}
-              className={`flex items-center justify-center space-x-2 py-2 px-3 rounded-lg border text-xs font-mono font-medium transition-all ${
-                actionType === 'block_port'
-                  ? 'border-cyan-400 bg-cyan-950/40 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
-                  : 'border-[#142d54] bg-[#071329] text-slate-400 hover:text-slate-200 hover:border-[#1e447d]'
-              }`}
-            >
-              <Ban className="w-3.5 h-3.5" />
-              <span>Block port</span>
-            </button>
-          </div>
-        </div>
-
-        {/* TARGET HOST Selector */}
-        <div className="space-y-1.5 relative">
-          <label className="text-[10px] font-mono tracking-wider text-slate-400 uppercase font-semibold">
-            Target Host
-          </label>
-          <button
-            onClick={() => hosts.length > 0 && setShowHostDropdown(!showHostDropdown)}
-            disabled={hosts.length === 0}
-            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg border border-[#142d54] bg-[#071329] text-xs font-mono text-slate-200 hover:border-cyan-500/40 transition-colors disabled:opacity-50"
-          >
-            <span className="font-bold text-white">
-              {selectedHost ? selectedHost.name : 'No Target Host (Awaiting Telemetry)'}
-            </span>
-            <div className="flex items-center space-x-2 text-slate-400">
-              <span>{selectedHost ? selectedHost.ip : '--'}</span>
-              <ChevronDown className="w-3.5 h-3.5" />
+    <div className="space-y-6">
+      {/* 1. Header Context Banner */}
+      <div
+        className={`p-5 sm:p-6 rounded-2xl border shadow-lg transition-colors ${
+          isLight
+            ? 'bg-white border-slate-200 text-slate-900'
+            : isMidnight
+            ? 'bg-[#071329]/95 border-[#142f5c] text-white'
+            : 'bg-[#0e1628]/95 border-[#1d2a45] text-white'
+        }`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start space-x-3.5">
+            <div className="p-3 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 shrink-0 mt-0.5">
+              <GitFork className="w-6 h-6" />
             </div>
-          </button>
-
-          {/* Host Dropdown Options */}
-          {showHostDropdown && hosts.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 rounded-lg border border-[#173a72] bg-[#071329] shadow-2xl z-30 overflow-hidden divide-y divide-[#10264b]">
-              {hosts.map((h) => (
-                <div
-                  key={h.id}
-                  onClick={() => {
-                    if (soundEnabled) playCyberTone('click');
-                    onSelectTargetHost(h.id);
-                    setShowHostDropdown(false);
-                  }}
-                  className="flex items-center justify-between px-3.5 py-2 hover:bg-[#0c234a] cursor-pointer text-xs font-mono transition-colors"
-                >
-                  <span className="text-slate-100 font-bold">{h.name}</span>
-                  <span className="text-cyan-400 text-[11px]">{h.ip}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* TARGET PORT Selector (shown when block_port is active) */}
-        {actionType === 'block_port' && (
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-mono tracking-wider text-slate-400 uppercase font-semibold">
-              Target Port (Service)
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { port: 445, label: '445 (SMB)' },
-                { port: 3389, label: '3389 (RDP)' },
-                { port: 8080, label: '8080 (API)' }
-              ].map((p) => (
-                <button
-                  key={p.port}
-                  onClick={() => {
-                    if (soundEnabled) playCyberTone('click');
-                    onSelectPort(p.port);
-                  }}
-                  className={`py-1.5 px-2 rounded border text-xs font-mono transition-all ${
-                    selectedPort === p.port
-                      ? 'border-cyan-400 bg-cyan-950/40 text-cyan-300'
-                      : 'border-[#142d54] bg-[#071329] text-slate-400 hover:text-white'
+            <div>
+              <div className="flex items-center space-x-2">
+                <h2 className="text-lg sm:text-xl font-bold font-sans tracking-tight">
+                  Counterfactual Defense Simulator
+                </h2>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
+                    isLight
+                      ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
+                      : 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40'
                   }`}
                 >
-                  {p.label}
-                </button>
-              ))}
+                  Policy Sandbox
+                </span>
+              </div>
+              <p className={`text-xs font-sans mt-1 max-w-2xl ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
+                Simulate firewall rules, network quarantine, and port blocks in-memory before applying them to physical edge devices. Evaluates projected blast radius reduction in real time.
+              </p>
             </div>
           </div>
-        )}
 
-        {/* Big Action Button: Simulate Defence */}
-        <button
-          onClick={() => {
-            if (soundEnabled) playCyberTone('sim');
-            onRunSimulation();
-          }}
-          disabled={isSimulating || hosts.length === 0}
-          className="w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold font-mono text-sm tracking-wide shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_25px_rgba(6,182,212,0.6)] active:scale-98 transition-all disabled:opacity-40"
+          <div
+            className={`px-4 py-2.5 rounded-xl border text-xs font-mono shrink-0 ${
+              isLight
+                ? 'bg-slate-50 border-slate-200 text-slate-700'
+                : 'bg-slate-900/80 border-slate-800 text-slate-300'
+            }`}
+          >
+            <div className="text-[10px] text-slate-400 uppercase font-semibold">Active Engine Mode</div>
+            <div className="font-bold text-cyan-500 mt-0.5">Graph Neural Counterfactuals</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Main 12-Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Interactive Simulation Sandbox (7 cols) */}
+        <div
+          className={`lg:col-span-7 rounded-2xl border p-5 sm:p-6 shadow-xl space-y-5 transition-colors ${
+            isLight
+              ? 'bg-white border-slate-200 text-slate-800'
+              : isMidnight
+              ? 'bg-[#071329]/95 border-[#142f5c] text-slate-100'
+              : 'bg-[#0e1628]/95 border-[#1d2a45] text-slate-100'
+          }`}
         >
-          <Zap className={`w-4 h-4 fill-slate-950 ${isSimulating ? 'animate-bounce' : ''}`} />
-          <span>{hosts.length === 0 ? 'Awaiting Host Telemetry...' : isSimulating ? 'Simulating in memory...' : 'Simulate defence'}</span>
-        </button>
-
-        {/* SIMULATED RISK REDUCTION METRICS */}
-        <div className="pt-2 border-t border-[#12284c] space-y-2.5">
-          <div className="flex items-center justify-between text-[10px] font-mono tracking-wider uppercase">
-            <span className="text-slate-400 font-semibold">Simulated Risk Reduction</span>
-            <span className="text-slate-500">World Model Delta</span>
+          <div className="border-b pb-4">
+            <h3 className={`text-base font-bold font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>
+              Configure Mitigation Action
+            </h3>
+            <p className={`text-xs font-sans mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              Select the network defense action and the target infrastructure node to test.
+            </p>
           </div>
 
-          <div className="flex items-baseline justify-between">
-            <div className="flex items-center space-x-2 font-mono">
-              <span className="text-2xl sm:text-3xl font-extrabold text-rose-500">
-                {currentThreatRisk != null ? `${currentThreatRisk}%` : '--'}
-              </span>
-              <span className="text-slate-400 text-lg">↘</span>
-              <span className="text-2xl sm:text-3xl font-extrabold text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.3)]">
-                {simulatedRisk != null ? `${simulatedRisk}%` : '--'}
+          {/* Action Selector */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
+              Defense Action Type
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => {
+                  if (soundEnabled) playCyberTone('click');
+                  onChangeActionType('isolate_host');
+                }}
+                className={`flex items-center space-x-2.5 p-3 rounded-xl border text-xs font-sans font-bold transition-all ${
+                  actionType === 'isolate_host'
+                    ? isLight
+                      ? 'border-cyan-400 bg-cyan-50 text-cyan-900 shadow-xs'
+                      : 'border-cyan-400 bg-cyan-950/40 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+                    : isLight
+                    ? 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
+                    : 'border-slate-800 bg-slate-900/60 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                <Lock className="w-4 h-4 text-cyan-500 shrink-0" />
+                <div className="text-left">
+                  <div>Isolate Host</div>
+                  <div className="text-[10px] font-normal opacity-70">Cut off all internal network routes</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (soundEnabled) playCyberTone('click');
+                  onChangeActionType('block_port');
+                }}
+                className={`flex items-center space-x-2.5 p-3 rounded-xl border text-xs font-sans font-bold transition-all ${
+                  actionType === 'block_port'
+                    ? isLight
+                      ? 'border-cyan-400 bg-cyan-50 text-cyan-900 shadow-xs'
+                      : 'border-cyan-400 bg-cyan-950/40 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+                    : isLight
+                    ? 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
+                    : 'border-slate-800 bg-slate-900/60 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                <Ban className="w-4 h-4 text-amber-500 shrink-0" />
+                <div className="text-left">
+                  <div>Block Port / Service</div>
+                  <div className="text-[10px] font-normal opacity-70">Drop inbound packets on target port</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Target Host Dropdown */}
+          <div className="space-y-1.5 relative">
+            <label className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
+              Target Node
+            </label>
+            <button
+              onClick={() => setShowHostDropdown(!showHostDropdown)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-xs font-mono transition-colors ${
+                isLight
+                  ? 'border-slate-300 bg-slate-50 text-slate-900 hover:border-cyan-500'
+                  : 'border-slate-800 bg-slate-900/80 text-slate-100 hover:border-cyan-500/50'
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <Server className="w-4 h-4 text-cyan-500" />
+                <span className="font-bold text-sm">{selectedHost.name}</span>
+                <span className="text-slate-400">({selectedHost.role})</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-slate-400 font-bold">{selectedHost.ip}</span>
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              </div>
+            </button>
+
+            {showHostDropdown && (
+              <div
+                className={`absolute top-full left-0 right-0 mt-1.5 rounded-xl border shadow-2xl z-30 overflow-hidden divide-y ${
+                  isLight
+                    ? 'bg-white border-slate-300 divide-slate-100 text-slate-800'
+                    : 'bg-slate-900 border-slate-700 divide-slate-800 text-slate-100'
+                }`}
+              >
+                {hosts.map((h) => (
+                  <div
+                    key={h.id}
+                    onClick={() => {
+                      if (soundEnabled) playCyberTone('click');
+                      onSelectTargetHost(h.id);
+                      setShowHostDropdown(false);
+                    }}
+                    className={`flex items-center justify-between px-4 py-2.5 cursor-pointer text-xs font-mono transition-colors ${
+                      isLight ? 'hover:bg-slate-100' : 'hover:bg-slate-800'
+                    } ${selectedTargetHostId === h.id ? (isLight ? 'bg-cyan-50 font-bold' : 'bg-cyan-950/40 font-bold') : ''}`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold">{h.name}</span>
+                      <span className="text-slate-400 text-[11px]">{h.role}</span>
+                    </div>
+                    <span className="text-cyan-500">{h.ip}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Port Selector (if block_port is chosen) */}
+          {actionType === 'block_port' && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
+                Target Port / Attack Vector
+              </label>
+              <div className="grid grid-cols-3 gap-2.5">
+                {[
+                  { port: 445, label: 'Port 445 (SMB / PsExec)' },
+                  { port: 3389, label: 'Port 3389 (RDP)' },
+                  { port: 8080, label: 'Port 8080 (API Gateway)' }
+                ].map((p) => (
+                  <button
+                    key={p.port}
+                    onClick={() => {
+                      if (soundEnabled) playCyberTone('click');
+                      onSelectPort(p.port);
+                    }}
+                    className={`py-2 px-3 rounded-xl border text-xs font-mono transition-all ${
+                      selectedPort === p.port
+                        ? isLight
+                          ? 'border-amber-400 bg-amber-50 text-amber-900 font-bold'
+                          : 'border-amber-400 bg-amber-950/50 text-amber-300 font-bold'
+                        : isLight
+                        ? 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                        : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Primary Action Button: Simulate */}
+          <button
+            onClick={() => {
+              if (soundEnabled) playCyberTone('sim');
+              onRunSimulation();
+            }}
+            disabled={isSimulating}
+            className="w-full flex items-center justify-center space-x-2.5 py-3.5 px-5 rounded-xl bg-gradient-to-r from-cyan-600 via-cyan-500 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold font-sans text-sm tracking-wide shadow-[0_0_20px_rgba(6,182,212,0.35)] active:scale-98 transition-all disabled:opacity-50"
+          >
+            <Zap className={`w-4 h-4 fill-white ${isSimulating ? 'animate-spin' : ''}`} />
+            <span>{isSimulating ? 'Running In-Memory Counterfactual...' : 'Simulate Counterfactual Defense'}</span>
+          </button>
+
+          {/* Simulated Risk Reduction Comparison Gauge */}
+          <div
+            className={`p-4 rounded-xl border space-y-3 ${
+              isLight
+                ? 'bg-slate-50 border-slate-200'
+                : 'bg-slate-900/70 border-slate-800'
+            }`}
+          >
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-slate-400 uppercase font-semibold">Simulated Threat Impact</span>
+              <span className="text-emerald-500 font-bold">
+                {deltaPts > 0 ? `-${deltaPts} pts reduction` : `${deltaPts} pts`}
               </span>
             </div>
 
-            <div className="text-sm sm:text-base font-mono font-bold text-emerald-400 bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-500/30">
-              {deltaPts != null ? (deltaPts > 0 ? `-${deltaPts} pts` : `${deltaPts} pts`) : '--'}
+            <div className="flex items-baseline justify-between">
+              <div>
+                <span className="text-xs text-slate-400 font-mono">Current Infiltration Risk</span>
+                <div className="text-2xl sm:text-3xl font-extrabold font-mono text-rose-500">
+                  {currentThreatRisk}%
+                </div>
+              </div>
+
+              <div className="text-slate-400 text-xl font-bold">➔</div>
+
+              <div className="text-right">
+                <span className="text-xs text-slate-400 font-mono">Post-Mitigation Projected Risk</span>
+                <div className="text-2xl sm:text-3xl font-extrabold font-mono text-emerald-500">
+                  {simulatedRisk}%
+                </div>
+              </div>
+            </div>
+
+            {/* Visual Bar */}
+            <div className="relative h-2.5 w-full rounded-full bg-slate-300 dark:bg-slate-800 overflow-hidden">
+              <div
+                className="absolute left-0 top-0 bottom-0 bg-rose-500 transition-all duration-500"
+                style={{ width: `${currentThreatRisk}%` }}
+              />
+              <div
+                className="absolute left-0 top-0 bottom-0 bg-emerald-400 transition-all duration-500 shadow-[0_0_8px_#34d399]"
+                style={{ width: `${simulatedRisk}%` }}
+              />
             </div>
           </div>
 
-          {/* Dual Segment Progress Bar */}
-          <div className="relative h-2 w-full rounded-full bg-[#0c1c38] overflow-hidden">
-            <div
-              className="absolute left-0 top-0 bottom-0 bg-rose-500 transition-all duration-500"
-              style={{ width: `${currentThreatRisk || 0}%` }}
-            />
-            <div
-              className="absolute left-0 top-0 bottom-0 bg-emerald-400 shadow-[0_0_8px_#34d399] transition-all duration-500"
-              style={{ width: `${simulatedRisk || 0}%` }}
-            />
-          </div>
+          {/* Deploy Policy Button */}
+          <div>
+            <button
+              onClick={handleDeploy}
+              className={`w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-xl border font-sans font-bold text-xs transition-all ${
+                isLight
+                  ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-900'
+                  : 'border-emerald-500/40 bg-emerald-950/30 hover:bg-emerald-950/50 text-emerald-300'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <span>Deploy Verified Policy to Active Firewalls</span>
+            </button>
 
-          <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
-            <span>Current threat</span>
-            <span>After {actionType === 'isolate_host' ? 'isolation' : 'port block'}</span>
+            {showDeploySuccess && (
+              <div className="mt-2.5 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-300 text-xs font-sans font-semibold flex items-center justify-center space-x-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                <span>Policy successfully deployed. Network traffic rerouted away from compromised node.</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* RECENT SIMULATIONS LIST */}
-        <div className="pt-3 border-t border-[#12284c] space-y-2">
-          <div className="flex items-center justify-between text-[10px] font-mono tracking-wider text-slate-400 uppercase">
-            <span>Recent Simulations</span>
-            <span className="text-slate-500">{recentSimulations.length} Runs</span>
-          </div>
-
-          <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-            {recentSimulations.length === 0 ? (
-              <div className="text-center py-4 text-slate-500 text-[11px] font-mono border border-dashed border-[#142d54] rounded-lg">
-                No simulation history yet. Select an action above to test intervention impact.
+        {/* Right Column: Simulation History & Blast Radius Analysis (5 cols) */}
+        <div className="lg:col-span-5 space-y-5">
+          {/* History Panel */}
+          <div
+            className={`rounded-2xl border p-5 shadow-xl space-y-4 transition-colors ${
+              isLight
+                ? 'bg-white border-slate-200 text-slate-800'
+                : isMidnight
+                ? 'bg-[#071329]/95 border-[#142f5c] text-slate-100'
+                : 'bg-[#0e1628]/95 border-[#1d2a45] text-slate-100'
+            }`}
+          >
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h4 className={`text-sm font-bold font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  Recent Simulation History
+                </h4>
+                <p className={`text-[11px] font-sans ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Click any past scenario to reload its configuration
+                </p>
               </div>
-            ) : (
-              recentSimulations.map((sim) => (
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                  isLight ? 'bg-slate-100 text-slate-600' : 'bg-slate-800 text-slate-400'
+                }`}
+              >
+                {recentSimulations.length} runs
+              </span>
+            </div>
+
+            <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+              {recentSimulations.map((sim) => (
                 <div
                   key={sim.id}
                   onClick={() => {
                     if (soundEnabled) playCyberTone('click');
                     onSelectSimulation(sim);
                   }}
-                  className="flex items-center justify-between p-2.5 rounded-lg border border-[#122b54] bg-[#071329] hover:bg-[#0c234a] hover:border-cyan-500/30 cursor-pointer transition-colors text-xs font-mono"
+                  className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
+                    isLight
+                      ? 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                      : 'border-slate-800 bg-slate-900/60 hover:bg-slate-800 hover:border-cyan-500/30'
+                  }`}
                 >
-                  <div className="flex items-center space-x-2.5">
-                    <div className="p-1.5 rounded bg-[#0b2247] text-cyan-400">
-                      {sim.actionType === 'isolate_host' ? (
-                        <Lock className="w-3.5 h-3.5" />
-                      ) : (
-                        <Ban className="w-3.5 h-3.5" />
-                      )}
+                  <div className="flex items-center space-x-3">
+                    <div
+                      className={`p-2 rounded-lg ${
+                        isLight ? 'bg-white text-cyan-700 shadow-2xs' : 'bg-slate-800 text-cyan-400'
+                      }`}
+                    >
+                      {sim.actionType === 'isolate_host' ? <Lock className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
                     </div>
                     <div>
-                      <div className="font-bold text-slate-200">
-                        {sim.actionLabel} · {sim.targetLabel}
-                      </div>
-                      <div className="text-[10px] text-slate-500 flex items-center space-x-1">
+                      <div className="font-bold text-xs font-sans">{sim.actionLabel}</div>
+                      <div className="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5 font-mono">
                         <Clock className="w-2.5 h-2.5" />
-                        <span>{sim.timeAgo} · simulated</span>
+                        <span>{sim.timeAgo}</span>
+                        <span>·</span>
+                        <span>{sim.targetLabel}</span>
                       </div>
                     </div>
                   </div>
 
                   <div className="text-right">
-                    <div className="text-[11px] font-bold text-slate-300">
-                      <span className="text-rose-400">{sim.initialRisk}%</span>
-                      <span className="text-slate-500 mx-1">↘</span>
-                      <span className="text-emerald-400">{sim.simulatedRisk}%</span>
+                    <div className="text-xs font-mono font-bold text-emerald-500">
+                      {sim.delta < 0 ? `${sim.delta} pts` : `-${sim.delta} pts`}
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-400">
+                      {sim.initialRisk}% ➔ {sim.simulatedRisk}%
                     </div>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Deploy to Network Firewalls / Orchestration button */}
-        <div className="pt-2">
-          <button
-            onClick={handleDeploy}
-            className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-lg border border-emerald-500/40 bg-emerald-950/20 hover:bg-emerald-950/40 text-emerald-400 text-xs font-mono font-semibold transition-all"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Apply defence to active firewall rules</span>
-          </button>
-
-          {showDeploySuccess && (
-            <div className="mt-2 p-2 rounded bg-emerald-950/60 border border-emerald-500/50 text-emerald-300 text-[11px] font-mono text-center animate-in fade-in flex items-center justify-center space-x-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Counterfactual rule pushed to edge orchestrator!</span>
+              ))}
             </div>
-          )}
+          </div>
+
+          {/* Blast Radius Assessment Card */}
+          <div
+            className={`rounded-2xl border p-5 shadow-xl space-y-3 transition-colors ${
+              isLight
+                ? 'bg-white border-slate-200 text-slate-800'
+                : isMidnight
+                ? 'bg-[#071329]/95 border-[#142f5c] text-slate-100'
+                : 'bg-[#0e1628]/95 border-[#1d2a45] text-slate-100'
+            }`}
+          >
+            <div className="flex items-center space-x-2">
+              <ShieldAlert className="w-4 h-4 text-amber-500" />
+              <h4 className={`text-sm font-bold font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                Blast Radius Impact Analysis
+              </h4>
+            </div>
+
+            <div className="space-y-2 text-xs font-sans">
+              <div
+                className={`p-2.5 rounded-xl border flex items-center justify-between ${
+                  isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/60 border-slate-800'
+                }`}
+              >
+                <span className="text-slate-500 font-medium">Domain Controller Exposure:</span>
+                <span className="font-bold text-emerald-500">Protected (-91%)</span>
+              </div>
+              <div
+                className={`p-2.5 rounded-xl border flex items-center justify-between ${
+                  isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/60 border-slate-800'
+                }`}
+              >
+                <span className="text-slate-500 font-medium">Internal API Availability:</span>
+                <span className="font-bold text-slate-400">99.8% Nominal</span>
+              </div>
+              <div
+                className={`p-2.5 rounded-xl border flex items-center justify-between ${
+                  isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-900/60 border-slate-800'
+                }`}
+              >
+                <span className="text-slate-500 font-medium">Lateral Propagation Paths:</span>
+                <span className="font-bold text-emerald-500">Severed (0 reachable hops)</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -15,7 +15,7 @@ function getAudioContext(): AudioContext | null {
   return audioCtx;
 }
 
-export function playCyberTone(type: 'click' | 'sim' | 'alert' | 'success') {
+export function playCyberTone(type: 'click' | 'sim' | 'alert' | 'success' | 'policy') {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
@@ -51,7 +51,7 @@ export function playCyberTone(type: 'click' | 'sim' | 'alert' | 'success') {
       gain.gain.linearRampToValueAtTime(0.001, now + 0.18);
       osc.start(now);
       osc.stop(now + 0.18);
-    } else if (type === 'success') {
+    } else if (type === 'success' || type === 'policy') {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(523.25, now); // C5
       osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
