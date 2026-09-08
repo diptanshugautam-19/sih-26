@@ -6,6 +6,7 @@ Multi-Task Output Heads for the Predictive Cyber Defence World Model:
 2. Graded Infiltration Risk Head (outputs time-series anticipation probability).
 3. MITRE ATT&CK Stage Progression Classifier.
 4. Node-Level Host Risk Attribution Head (identifies targeted/escalating victim IPs).
+5. OOD Detection Head (self-supervised autoencoder; reconstruction error = OOD score).
 """
 
 from __future__ import annotations
@@ -57,6 +58,19 @@ class MultiTaskWorldModelHeads(nn.Module):
             nn.Sigmoid(),
         )
 
+        # Head 5: OOD Detection — self-supervised autoencoder bottleneck.
+        # Reconstruction error of the latent vector is the OOD score:
+        # high error = the current network state is unlike anything seen in training.
+        # No external labels needed; training signal is purely self-supervised.
+        self.ood_encoder = nn.Sequential(
+            nn.Linear(latent_dim, latent_dim // 4),
+            nn.ReLU(),
+        )
+        self.ood_decoder = nn.Sequential(
+            nn.Linear(latent_dim // 4, latent_dim),
+            nn.ReLU(),
+        )
+
     def forward(
         self,
         summary_latent: torch.Tensor,
@@ -99,5 +113,16 @@ class MultiTaskWorldModelHeads(nn.Module):
         if node_latents is not None:
             host_risks = self.host_risk_head(node_latents).squeeze(-1)
             out["host_risks"] = host_risks
+
+        # 5. OOD detection via autoencoder reconstruction error
+        # detach() ensures the OOD path doesn't bleed gradients into the main encoder;
+        # the autoencoder only trains its own bottleneck weights.
+        z_ood = self.ood_encoder(summary_latent.detach())
+        recon = self.ood_decoder(z_ood)
+        ood_score = F.mse_loss(
+            recon, summary_latent.detach(), reduction="none"
+        ).mean(dim=-1)   # [batch_size] or scalar
+        out["ood_score"] = ood_score
+        out["ood_recon_loss"] = ood_score.mean()  # scalar loss for training signal
 
         return out

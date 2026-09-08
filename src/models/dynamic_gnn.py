@@ -8,6 +8,10 @@ Solves the static GAT limitation:
   decays gracefully rather than vanishing.
 - When an attacker suddenly initiates lateral movement, the node's prior memory
   spikes the spatial attention weights α_ij on suspicious edges.
+
+Adds edge dropout regularisation: on dense DDoS windows where every host pair
+is connected, uniform attention weights become uninformative. Randomly dropping
+edges during training forces the GNN to produce robust embeddings from partial views.
 """
 
 from __future__ import annotations
@@ -44,6 +48,9 @@ class DynamicGATWithMemory(nn.Module):
         hidden_dim: int = 64,
         num_heads: int = 4,
         dropout: float = 0.1,
+        edge_dropout: float = 0.0,  # Fraction of edges randomly dropped during training.
+                                    # Default 0.0 = disabled (no effect on existing runs).
+                                    # Set to 0.1-0.2 for dense DDoS traffic regularisation.
         **kwargs,
     ):
         super().__init__()
@@ -54,6 +61,7 @@ class DynamicGATWithMemory(nn.Module):
         self.memory_dim = memory_dim
         self.num_heads = num_heads
         self.head_dim = hidden_dim // num_heads
+        self.edge_dropout = edge_dropout
 
         # Node feature projection (combines static features + prior node memory)
         self.node_proj = nn.Linear(actual_node_dim + memory_dim, hidden_dim)
@@ -113,6 +121,19 @@ class DynamicGATWithMemory(nn.Module):
             edge_attr = edge_attr * action_mask_edges.unsqueeze(-1)
 
         h_edge = F.relu(self.edge_proj(edge_attr))
+
+        # Edge dropout: randomly zero out edges during training only.
+        # This prevents attention weights from collapsing to uniform on fully-connected
+        # DDoS windows, forcing the GNN to build robust embeddings from partial views.
+        if self.training and self.edge_dropout > 0.0 and num_edges > 0:
+            keep = torch.rand(num_edges, device=x.device) >= self.edge_dropout
+            # Always keep at least one edge to avoid degenerate all-isolated graphs
+            if keep.sum() == 0:
+                keep[0] = True
+            edge_index = edge_index[:, keep]
+            edge_attr  = edge_attr[keep]
+            h_edge     = h_edge[keep]
+            num_edges  = edge_index.size(1)
 
         # 2. Compute spatial attention on active edges
         src_nodes, dst_nodes = edge_index[0], edge_index[1]

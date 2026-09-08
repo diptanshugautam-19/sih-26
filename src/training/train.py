@@ -13,6 +13,7 @@ Features:
 """
 
 from __future__ import annotations
+import json
 import os
 import sys
 import time
@@ -364,6 +365,73 @@ def train(
     # Run final test evaluation
     test_losses, test_raw = eval_epoch(model, test_dl, loss_fn, device)
     print(f"\n  Test Loss: {test_losses['loss_total']:.4f}")
+
+    # ── Compute test F1 scores ────────────────────────────────────────────────
+    test_infil_f1 = 0.0
+    test_stage_f1 = 0.0
+    if len(test_raw["infil_targets"]) > 0:
+        test_infil_f1 = float(f1_score(
+            (test_raw["infil_targets"] > 0.5).astype(int),
+            (test_raw["infil_preds"]   > 0.5).astype(int),
+            zero_division=0,
+        ))
+        test_stage_f1 = float(f1_score(
+            test_raw["stage_targets"],
+            test_raw["stage_preds"],
+            average="macro",
+            zero_division=0,
+        ))
+    print(f"  Test Infil F1: {test_infil_f1:.4f} | Test Stage F1 (macro): {test_stage_f1:.4f}")
+
+    # ── Persist rich training report to reports/ ──────────────────────────────
+    reports_dir = Path(checkpoint_dir).parent / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    ckpt_tag = Path(checkpoint_dir).name
+    report_path = reports_dir / f"{ckpt_tag}_training_report.json"
+
+    # Read final sigma values from the loss function
+    final_sigmas = {
+        "sigma_dynamics":     float(loss_fn.log_sigma_dynamics.exp().item()),
+        "sigma_infiltration": float(loss_fn.log_sigma_infiltration.exp().item()),
+        "sigma_stage":        float(loss_fn.log_sigma_stage.exp().item()),
+        "sigma_ood":          float(loss_fn.log_sigma_ood.exp().item()),
+    }
+
+    # Compute mean OOD score on validation set
+    model.eval()
+    ood_scores_val = []
+    with torch.no_grad():
+        for batch in val_dl:
+            for sample in batch["samples"]:
+                graph_seq = [_snap_to_device(s, device) for s in sample.graph_sequence]
+                preds_ood = model.forward_sequence(graph_seq)
+                if "ood_score" in preds_ood:
+                    ood_scores_val.append(float(preds_ood["ood_score"].mean().item()))
+    mean_ood_val = float(np.mean(ood_scores_val)) if ood_scores_val else 0.0
+
+    report = {
+        "checkpoint_tag":        ckpt_tag,
+        "best_val_loss":         float(best_val_loss),
+        "test_loss":             float(test_losses["loss_total"]),
+        "test_infil_f1":         test_infil_f1,
+        "test_stage_f1_macro":   test_stage_f1,
+        "mean_ood_score_val":    mean_ood_val,
+        "final_sigmas":          final_sigmas,
+        "hyperparams": {
+            "num_epochs":   num_epochs,
+            "batch_size":   batch_size,
+            "lr":           lr,
+            "weight_decay": weight_decay,
+            "patience":     patience,
+            "seed":         seed,
+            "device":       str(device),
+        },
+        "train_history": train_history,
+    }
+
+    with open(report_path, "w", encoding="utf-8") as fh:
+        json.dump(report, fh, indent=2)
+    print(f"  [REPORT] Training report saved → {report_path}")
 
     return model, test_raw, train_history
 

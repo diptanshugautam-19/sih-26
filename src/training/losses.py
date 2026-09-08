@@ -3,7 +3,7 @@ src/training/losses.py
 
 Multi-Task Loss for the Predictive Cyber Defence World Model.
 
-Three task losses combined using Kendall, Gal & Cipolla (2018) homoscedastic
+Three supervised task losses combined using Kendall, Gal & Cipolla (2018) homoscedastic
 uncertainty weighting — the model learns the relative weights during training:
 
     L_total = sum_i [ (1 / (2 * sigma_i^2)) * L_i  +  log(sigma_i) ]
@@ -12,6 +12,7 @@ Tasks:
     1. Grounded Dynamics Loss  (MSE)      — predicts real future telemetry values
     2. Infiltration Risk Loss  (BCE)      — graded anticipation probability
     3. MITRE Stage Loss        (CE)       — kill-chain stage classification
+    4. OOD Reconstruction Loss (MSE)      — self-supervised autoencoder; optional
 
 Additionally includes:
     - Focal weighting for the BCE head to address CIC-IDS2018 class imbalance (~80% benign)
@@ -47,6 +48,8 @@ class UncertaintyWeightedMultiTaskLoss(nn.Module):
         self.log_sigma_dynamics = nn.Parameter(torch.zeros(1))
         self.log_sigma_infiltration = nn.Parameter(torch.zeros(1))
         self.log_sigma_stage = nn.Parameter(torch.zeros(1))
+        # OOD task sigma — only activated when ood_recon_loss is provided in forward()
+        self.log_sigma_ood = nn.Parameter(torch.zeros(1))
 
     def _focal_bce(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """
@@ -89,6 +92,7 @@ class UncertaintyWeightedMultiTaskLoss(nn.Module):
         stage_logits: torch.Tensor,       # [B, num_stages]
         stage_target: torch.Tensor,       # [B] long
         stage_conf: torch.Tensor,         # [B] float 0..1
+        ood_recon_loss: torch.Tensor | None = None,  # scalar, from heads forward(); optional
     ):
         # 1. Grounded dynamics MSE
         L_dyn = F.mse_loss(grounded_pred.float(), grounded_target.float())
@@ -110,13 +114,22 @@ class UncertaintyWeightedMultiTaskLoss(nn.Module):
             s_stage * L_stage + 2 * self.log_sigma_stage
         )
 
+        # OOD reconstruction loss (optional — zero impact when not provided)
+        L_ood = 0.0
+        if ood_recon_loss is not None:
+            s_ood = torch.exp(-2 * self.log_sigma_ood)
+            L_ood = s_ood * ood_recon_loss + 2 * self.log_sigma_ood
+            L_total = L_total + L_ood
+
         breakdown = {
             "loss_dynamics":      L_dyn.item(),
             "loss_infiltration":  L_infil.item(),
             "loss_stage":         L_stage.item(),
+            "loss_ood":           float(ood_recon_loss.item()) if ood_recon_loss is not None else 0.0,
             "loss_total":         L_total.item(),
             "sigma_dynamics":     float(self.log_sigma_dynamics.exp().item()),
             "sigma_infiltration": float(self.log_sigma_infiltration.exp().item()),
             "sigma_stage":        float(self.log_sigma_stage.exp().item()),
+            "sigma_ood":          float(self.log_sigma_ood.exp().item()),
         }
         return L_total, breakdown

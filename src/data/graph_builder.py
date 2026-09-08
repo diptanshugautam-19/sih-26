@@ -246,15 +246,14 @@ def build_graph_for_window(
     retrans_src = wdf.groupby("_src_str")["is_retransmission"].sum() if "is_retransmission" in wdf.columns else pd.Series(dtype=float)
     win_src = wdf.groupby("_src_str")["tcp_window"].mean() if "tcp_window" in wdf.columns else pd.Series(dtype=float)
 
-    # Port entropy per source
+    # Port entropy per source — named helper avoids walrus-operator compatibility issues
+    # and lets pandas use a cleaner agg path instead of apply-with-lambda.
+    def _src_port_entropy(s: pd.Series) -> float:
+        vc = s.value_counts(normalize=True).values
+        return float(-np.sum(vc * np.log2(vc + 1e-12)))
+
     if "dst_port" in wdf.columns:
-        port_entropy_per_src = (
-            wdf.groupby("_src_str")["dst_port"]
-            .apply(lambda s: float(-np.sum(
-                (vc := s.value_counts(normalize=True)).values *
-                np.log2(vc.values + 1e-12)
-            )))
-        )
+        port_entropy_per_src = wdf.groupby("_src_str")["dst_port"].agg(_src_port_entropy)
     else:
         port_entropy_per_src = pd.Series(dtype=float)
 
@@ -299,6 +298,10 @@ def build_graph_for_window(
         node_features[ip_id, 14] = _safe_float(retrans_src.get(ip_str, 0.0)) / max(out_deg, 1.0) # 14: host retrans rate
         node_features[ip_id, 15] = _safe_float(win_src.get(ip_str, 1024.0)) / 65535.0 # 15: norm TCP window
 
+    # NaN/Inf hard-guard: a single np.nan_to_num pass ensures no corrupt values
+    # ever reach the GNN regardless of edge-case inputs (zero-duration flows,
+    # divide-by-zero TTL variance, etc.).
+    node_features = np.nan_to_num(node_features, nan=0.0, posinf=0.0, neginf=0.0)
     x = torch.tensor(node_features, dtype=torch.float32)
 
     # 4. Compute Grounded Telemetry Target for this snapshot

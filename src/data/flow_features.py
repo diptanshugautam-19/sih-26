@@ -74,24 +74,35 @@ def aggregate_packets_to_flows(
 
     df = df.sort_values("timestamp").reset_index(drop=True)
 
-    # Fast vector canonical keys
+    # Fast vector canonical keys (fully vectorised — no Python loop)
     s_ip = df["src_ip"].astype(str).to_numpy()
     d_ip = df["dst_ip"].astype(str).to_numpy()
     s_pt = df["src_port"].fillna(0).astype(int).to_numpy()
     d_pt = df["dst_port"].fillna(0).astype(int).to_numpy()
     proto = df["protocol"].fillna(6).astype(int).to_numpy()
 
-    canon_keys = []
-    directions = []  # True if forward (initiator matches canonical first endpoint), False if backward
-    for i in range(len(df)):
-        ep_a = (s_ip[i], s_pt[i])
-        ep_b = (d_ip[i], d_pt[i])
-        if ep_a <= ep_b:
-            canon_keys.append(f"{ep_a[0]}:{ep_a[1]}<->{ep_b[0]}:{ep_b[1]}:{proto[i]}")
-            directions.append(True)
-        else:
-            canon_keys.append(f"{ep_b[0]}:{ep_b[1]}<->{ep_a[0]}:{ep_a[1]}:{proto[i]}")
-            directions.append(False)
+    # Vectorised tuple-comparison equivalent:
+    # ep_a <= ep_b  ⟺  (s_ip < d_ip) OR (s_ip == d_ip AND s_pt <= d_pt)
+    fwd_mask = (s_ip < d_ip) | ((s_ip == d_ip) & (s_pt <= d_pt))
+
+    # Select canonical A (smaller) and B (larger) endpoints
+    a_ip = np.where(fwd_mask, s_ip, d_ip)
+    a_pt = np.where(fwd_mask, s_pt, d_pt).astype(str)
+    b_ip = np.where(fwd_mask, d_ip, s_ip)
+    b_pt = np.where(fwd_mask, d_pt, s_pt).astype(str)
+    proto_str = proto.astype(str)
+
+    # Vectorised string concatenation via np.char.add (avoids Python loop entirely)
+    canon_keys = (
+        np.char.add(np.char.add(np.char.add(np.char.add(
+            np.char.add(np.char.add(a_ip, ":"), a_pt),
+            "<->"),
+            np.char.add(b_ip, ":")),
+            b_pt),
+            np.char.add(":", proto_str)
+        )
+    ).tolist()
+    directions = fwd_mask.tolist()  # True = forward (initiator is canonical endpoint A)
 
     df["_canon_key"] = canon_keys
     df["_is_fwd"] = directions

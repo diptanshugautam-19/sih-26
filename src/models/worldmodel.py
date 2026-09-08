@@ -168,12 +168,26 @@ class CyberDefenceWorldModel(nn.Module):
         graph_sequence: List[NetworkGraphSnapshot],
         isolated_host_id: int | None = None,
         blocked_port: int | None = None,
+        action: Any | None = None,
     ) -> Dict[str, Any]:
         """
         Counterfactual "What-If" simulation:
-        Zeroes out node/port features and recalculates predicted trajectory in <30ms.
+        Zeroes out node/port features or executes structured CounterfactualAction
+        and recalculates predicted trajectory in <30ms.
         """
         assert len(graph_sequence) > 0, "Graph sequence must contain at least 1 snapshot."
+
+        if action is not None:
+            from src.models.counterfactual import CounterfactualEngine
+            engine = CounterfactualEngine(self)
+            return engine.evaluate_intervention(graph_sequence, action)
+
+        if blocked_port is not None:
+            from src.models.counterfactual import CounterfactualAction, _apply_action_to_snapshot
+            act = CounterfactualAction(action_type="block_port", target=str(blocked_port))
+            intervened = [_apply_action_to_snapshot(s, act)[0] for s in graph_sequence]
+            return self.forward_sequence(intervened)
+
         max_nodes = max(snap.num_nodes for snap in graph_sequence)
         device = graph_sequence[0].x.device
 
@@ -183,6 +197,19 @@ class CyberDefenceWorldModel(nn.Module):
 
         # Run forward pass with action mask
         return self.forward_sequence(graph_sequence, action_mask_nodes=action_mask_nodes)
+
+    def rank_counterfactual_actions(
+        self,
+        graph_sequence: List[NetworkGraphSnapshot],
+        candidate_actions: list | None = None,
+    ) -> list:
+        """
+        Evaluates and ranks candidate mitigations by Net Defense Score
+        (Risk Reduction balanced against Operational Disruption).
+        """
+        from src.models.counterfactual import CounterfactualEngine
+        engine = CounterfactualEngine(self)
+        return engine.rank_interventions(graph_sequence, candidate_actions=candidate_actions)
 
     def estimate_uncertainty_mc_dropout(
         self,

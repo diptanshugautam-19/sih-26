@@ -47,9 +47,11 @@ class PredictResponse(BaseModel):
 
 
 class CounterfactualRequest(BaseModel):
-    action: str = Field(..., description="'isolate_host' or 'block_port'")
-    target: str = Field(..., description="IP address (e.g. '10.0.0.5') or port number (e.g. '445')")
+    action: str = Field(..., description="'isolate_host', 'block_port', 'rate_limit', 'segment_subnet', or 'honeypot_divert'")
+    target: str = Field(..., description="IP address (e.g. '10.0.0.5'), port ('445'), or subnet ('10.0.0.0/24')")
     current_risk: Optional[float] = Field(None, description="Baseline risk probability before action")
+    parameters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Action parameters (e.g. rate_factor)")
+    business_criticality: Optional[float] = Field(0.2, description="Target host/service criticality score (0.0 to 1.0)")
 
 
 class CounterfactualResponse(BaseModel):
@@ -59,3 +61,21 @@ class CounterfactualResponse(BaseModel):
     recalculated_risk: float
     risk_reduction: float
     stage_after_action: str
+    baseline_trajectory: Optional[List[float]] = None
+    counterfactual_trajectory: Optional[List[float]] = None
+    trajectory_delta: Optional[List[float]] = None
+    severed_edges_count: Optional[int] = 0
+    business_impact_score: Optional[float] = 0.0
+    net_defense_score: Optional[float] = 0.0
+    recommendation: Optional[str] = None
+
+
+class ActionRankingRequest(BaseModel):
+    actions: Optional[List[CounterfactualRequest]] = None
+    top_n: int = 5
+
+
+class ActionRankingResponse(BaseModel):
+    ranked_options: List[CounterfactualResponse]
+    optimal_action: Optional[CounterfactualResponse] = None
+    summary: str

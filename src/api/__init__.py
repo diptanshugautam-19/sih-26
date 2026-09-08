@@ -10,6 +10,8 @@ from src.api.schemas import (
     PredictResponse,
     CounterfactualRequest,
     CounterfactualResponse,
+    ActionRankingRequest,
+    ActionRankingResponse,
 )
 from src.api.app import create_app, app
 
@@ -21,6 +23,8 @@ __all__ = [
     "PredictResponse",
     "CounterfactualRequest",
     "CounterfactualResponse",
+    "ActionRankingRequest",
+    "ActionRankingResponse",
     "create_app",
     "app",
 ]
