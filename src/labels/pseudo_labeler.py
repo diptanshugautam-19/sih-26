@@ -184,8 +184,8 @@ def annotate_dataframe_with_pseudo_labels(df: pd.DataFrame) -> pd.DataFrame:
         raw_labels = df[label_col].astype(str)
         cleaned_labels = raw_labels.str.strip()
 
-        # Vectorized check for benign / empty strings
-        is_benign_explicit = cleaned_labels.str.lower().isin(["benign", "nan", "none", "0", ""])
+        # Vectorized check for benign / normal / background / empty strings
+        is_benign_explicit = cleaned_labels.str.lower().isin(["benign", "normal", "background", "nan", "none", "0", ""])
         stage_ids[is_benign_explicit]   = 0
         stage_names[is_benign_explicit] = "Benign"
         techniques[is_benign_explicit]  = "None"

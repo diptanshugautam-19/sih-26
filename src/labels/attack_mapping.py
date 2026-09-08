@@ -119,6 +119,16 @@ RAW_LABEL_TO_ATTACK_STAGE: Dict[str, Tuple[int, str, str]] = {
     "microsoft": (0, "Benign", "None"),
     "(empty)": (0, "Benign", "None"),
     "multicast": (0, "Benign", "None"),
+
+    # UNSW-NB15 Attack Taxonomy
+    "fuzzers": (1, "Reconnaissance", "T1595"),
+    "analysis": (1, "Reconnaissance", "T1595.002"),
+    "generic": (2, "Initial Access", "T1190"),
+    "exploits": (2, "Initial Access", "T1190"),
+    "shellcode": (2, "Initial Access", "T1059"),
+    "backdoor": (5, "Command & Control", "T1071.001"),
+    "backdoors": (5, "Command & Control", "T1071.001"),
+    "worms": (4, "Lateral Movement", "T1021"),
 }
 
 # Substring / pattern fallback rules for CTU-13 .binetflow and compound label strings
