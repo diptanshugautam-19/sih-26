@@ -6,7 +6,7 @@ import { playCyberTone } from '../utils/audio';
 interface ExplainabilitySectionProps {
   features: FeatureImportance[];
   edges: NetworkEdge[];
-  selectedEdge: NetworkEdge;
+  selectedEdge: NetworkEdge | null;
   onSelectEdge: (edge: NetworkEdge) => void;
   profile?: SourceExplainabilityProfile;
   onSelectSource?: (sourceId: string) => void;
@@ -28,6 +28,25 @@ export const ExplainabilitySection: React.FC<ExplainabilitySectionProps> = ({
 
   const isLight = theme === 'light';
   const isMidnight = theme === 'midnight';
+
+  if (!selectedEdge) {
+    return (
+      <div
+        className={`p-12 rounded-2xl border text-center font-mono ${
+          isLight
+            ? 'bg-white border-slate-200 text-slate-500'
+            : isMidnight
+            ? 'bg-[#071329]/95 border-[#142f5c] text-slate-400'
+            : 'bg-[#0e1628]/95 border-[#1d2a45] text-slate-400'
+        }`}
+      >
+        <div className="flex items-center justify-center space-x-2 text-sm text-cyan-400">
+          <Activity className="w-5 h-5 animate-pulse" />
+          <span>Awaiting Graph Attention telemetry from backend /api/explainability...</span>
+        </div>
+      </div>
+    );
+  }
 
   // Group unique sources from edges
   const sourceIds: string[] = Array.from(new Set(edges.map((e) => e.source)));

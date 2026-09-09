@@ -31,6 +31,16 @@ export const TrajectoryForecast: React.FC<TrajectoryForecastProps> = ({
   const isLight = theme === 'light';
   const isMidnight = theme === 'midnight';
 
+  if (!points || points.length === 0) {
+    return (
+      <div className={`p-8 rounded-2xl border text-center font-mono text-sm ${
+        isLight ? 'bg-white border-slate-200 text-slate-500' : 'bg-[#071329] border-[#142f5c] text-slate-400'
+      }`}>
+        Connecting to backend world model forecast stream...
+      </div>
+    );
+  }
+
   // SVG Chart Dimensions (viewBox: 600 x 220)
   const width = 600;
   const height = 220;
