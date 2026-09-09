@@ -65,3 +65,4 @@ reports/figures/*
 node_modules/
 frontend/dist/
 frontend_streamlit/
+data/uploads/

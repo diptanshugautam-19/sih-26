@@ -1,5 +1,7 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
+import { execFileSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 
 const PORT = 3000;
@@ -185,6 +187,9 @@ let blockedPorts: { [hostId: string]: number[] } = {};
 let windowSeq = 842;
 let activeCapture: CaptureMetadata | null = null;
 let customPredictedTarget: any = null;
+let customTelemetry: any = null;
+let customForecastPoints: any = null;
+let customAlerts: any = null;
 
 let simulationRecords = [
   {
@@ -827,215 +832,246 @@ async function startServer() {
     });
   });
 
-  // API Route: Custom File Upload (PCAP, CSV, JSON, LOG)
+  // API Route: Custom File Upload (PCAP, PCAPNG, CSV, JSON, LOG)
   app.post('/api/upload-capture', (req, res) => {
     try {
-      const { fileName, fileType, fileContent, fileSize } = req.body;
+      const { fileName, fileType, fileContent, fileSize, isBase64 } = req.body;
 
       if (!fileName) {
         return res.status(400).json({ error: 'fileName is required' });
       }
 
-      // Analyze file content (extract IPs, ports, protocols)
-      const contentStr = typeof fileContent === 'string' ? fileContent : '';
-      const ipRegex = /(\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b)/g;
-      const matches = contentStr.match(ipRegex) || [];
-      const uniqueIps = Array.from(new Set(matches)).slice(0, 8);
+      console.log(`[INGESTION] Received upload: ${fileName} (${fileType}, ${(fileSize / 1024).toFixed(1)} KB, isBase64: ${!!isBase64})`);
 
-      // Protocol heuristics
-      const detectedProtocols: string[] = [];
-      const lowerContent = (contentStr + fileName).toLowerCase();
-      if (lowerContent.includes('smb') || lowerContent.includes('445')) detectedProtocols.push('SMB');
-      if (lowerContent.includes('kerberos') || lowerContent.includes('88')) detectedProtocols.push('Kerberos');
-      if (lowerContent.includes('http') || lowerContent.includes('80')) detectedProtocols.push('HTTP');
-      if (lowerContent.includes('tls') || lowerContent.includes('ssl') || lowerContent.includes('443')) detectedProtocols.push('HTTPS/TLS');
-      if (lowerContent.includes('dns') || lowerContent.includes('53')) detectedProtocols.push('DNS');
-      if (lowerContent.includes('rdp') || lowerContent.includes('3389')) detectedProtocols.push('RDP');
-      if (lowerContent.includes('modbus') || lowerContent.includes('502')) detectedProtocols.push('Modbus TCP');
-      if (lowerContent.includes('ssh') || lowerContent.includes('22')) detectedProtocols.push('SSH');
-      if (detectedProtocols.length === 0) detectedProtocols.push('TCP/IP Streams', 'ARP', 'ICMP');
-
-      const estimatedPackets = Math.max(120, Math.round((fileSize || 102400) / 95));
-      const estimatedFlows = Math.max(8, Math.round(estimatedPackets / 18));
-      const durationSeconds = Math.max(30, Math.round(estimatedPackets / 45));
-
-      // Construct dynamic hosts if user provided a network recording with IP addresses
-      if (uniqueIps.length >= 3) {
-        const srcIp = uniqueIps[0];
-        const dmzIp = uniqueIps[1];
-        const targetIp = uniqueIps[2];
-        const extraIp = uniqueIps[3] || '10.0.0.99';
-
-        currentHosts = [
-          {
-            id: 'node-src',
-            name: `INGRESS-${srcIp.split('.').pop()}`,
-            ip: srcIp,
-            role: 'External / Ingress Attack Vector',
-            segment: 'dmz',
-            status: 'compromised',
-            x: 10,
-            y: 72,
-            openPorts: [443, 8080],
-            attentionScore: 0.97,
-            os: 'Linux / Capture Source',
-            inboundEdges: 0,
-            outboundEdges: 2
-          },
-          {
-            id: 'node-dmz',
-            name: `GATEWAY-${dmzIp.split('.').pop()}`,
-            ip: dmzIp,
-            role: 'Intermediate Node (Compromised)',
-            segment: 'dmz',
-            status: 'compromised',
-            x: 35,
-            y: 64,
-            openPorts: [80, 443, 445],
-            attentionScore: 0.91,
-            os: 'Enterprise Gateway',
-            inboundEdges: 1,
-            outboundEdges: 2
-          },
-          {
-            id: 'node-target',
-            name: `TARGET-${targetIp.split('.').pop()}`,
-            ip: targetIp,
-            role: 'Primary Infrastructure Target',
-            segment: 'corporate',
-            status: 'targeted',
-            x: 62,
-            y: 28,
-            openPorts: [135, 445, 3389],
-            attentionScore: 0.94,
-            os: 'Windows Server 2022 Core',
-            inboundEdges: 2,
-            outboundEdges: 1
-          },
-          {
-            id: 'node-corp',
-            name: `HOST-${extraIp.split('.').pop()}`,
-            ip: extraIp,
-            role: 'Internal Workstation / Storage',
-            segment: 'corporate',
-            status: 'normal',
-            x: 82,
-            y: 62,
-            openPorts: [445, 5432],
-            attentionScore: 0.58,
-            os: 'Corporate Node',
-            inboundEdges: 1,
-            outboundEdges: 0
-          }
-        ];
-
-        currentEdges = [
-          {
-            id: 'e-up-1',
-            source: 'node-src',
-            target: 'node-dmz',
-            type: 'attack',
-            weight: 0.93,
-            port: 443,
-            protocol: detectedProtocols[0] || 'TCP Ingress',
-            attention: 0.93
-          },
-          {
-            id: 'e-up-2',
-            source: 'node-dmz',
-            target: 'node-target',
-            type: 'attack',
-            weight: 0.96,
-            port: 445,
-            protocol: detectedProtocols[1] || 'Lateral RPC / SMB',
-            attention: 0.96
-          },
-          {
-            id: 'e-up-3',
-            source: 'node-target',
-            target: 'node-corp',
-            type: 'elevated',
-            weight: 0.61,
-            port: 3389,
-            protocol: 'Internal Sync',
-            attention: 0.61
-          }
-        ];
-
-        customPredictedTarget = {
-          hostId: 'node-target',
-          name: `TARGET-${targetIp.split('.').pop()}`,
-          role: 'Primary Infrastructure Target',
-          ip: targetIp,
-          segment: 'corporate' as const,
-          os: 'Windows Server 2022 Core',
-          probabilityPercent: 93.4,
-          timeToAttackSeconds: 16.5,
-          timeToAttackLabel: '+16.5s',
-          predictedAttackVector: `${detectedProtocols[0] || 'SMB'} Lateral Traversal from ${dmzIp}`,
-          primarySourceId: 'node-dmz',
-          primarySourceName: `GATEWAY-${dmzIp.split('.').pop()}`,
-          incomingPort: 445,
-          protocol: detectedProtocols[0] || 'SMB / PsExec',
-          mitreTactic: 'TA0008 (Lateral Movement)',
-          mitreTacticCode: 'TA0008',
-          probabilityIssues: [
-            {
-              id: 'iss-up-1',
-              factor: `High Session Density in ${fileName}`,
-              description: `Network capture shows ${estimatedFlows} anomalous flows directed from ${dmzIp} to ${targetIp}.`,
-              impactScore: 92,
-              severity: 'critical' as const,
-              category: 'protocol_flaw' as const
-            },
-            {
-              id: 'iss-up-2',
-              factor: `Protocol Anomaly: ${detectedProtocols.join(', ')}`,
-              description: `Deep packet inspection parsed unexpected high-frequency packets matching lateral movement exploit vectors.`,
-              impactScore: 88,
-              severity: 'critical' as const,
-              category: 'network_path' as const
-            },
-            {
-              id: 'iss-up-3',
-              factor: 'GNN Spatial Link Attention Spike',
-              description: 'World Model inference computed 0.96 link attention score between intermediate gateway and target.',
-              impactScore: 84,
-              severity: 'high' as const,
-              category: 'attention_spike' as const
-            }
-          ],
-          recommendedMitigations: [
-            `Isolate GATEWAY-${dmzIp.split('.').pop()} immediately`,
-            `Apply firewall rule blocking Port 445 to ${targetIp}`,
-            'Flush active TCP socket sessions'
-          ]
-        };
-      } else {
-        // Fallback: apply capture statistics to baseline hosts
-        customPredictedTarget = null;
+      // 1. Ensure upload directory exists
+      const projectRoot = path.resolve(process.cwd(), '..');
+      const uploadsDir = path.join(projectRoot, 'data', 'uploads');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
       }
 
-      isolatedHostIds = [];
-      blockedPorts = {};
-      windowSeq += 1;
+      const cleanName = (fileName || 'capture.pcap').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const savedFilePath = path.join(uploadsDir, `${Date.now()}_${cleanName}`);
 
-      activeCapture = {
-        id: `cap-${Date.now()}`,
-        fileName,
-        fileType: (fileType || 'pcap') as any,
-        fileSize: fileSize || 1048576,
-        packetCount: estimatedPackets,
-        flowCount: estimatedFlows,
-        durationSeconds,
-        protocolsDetected: detectedProtocols,
-        threatNodesDetected: 2,
-        uploadedAt: new Date().toISOString()
-      };
+      // 2. Save file to disk
+      if (isBase64 && typeof fileContent === 'string') {
+        const fileBuffer = Buffer.from(fileContent, 'base64');
+        fs.writeFileSync(savedFilePath, fileBuffer);
+      } else if (typeof fileContent === 'string') {
+        fs.writeFileSync(savedFilePath, fileContent, 'utf-8');
+      }
+
+      let parsedFromModel = false;
+      const lowerExt = (fileType || fileName.split('.').pop() || '').toLowerCase();
+
+      // 3. If binary PCAP / PCAPNG, execute Neural World Model Inference via Python
+      if (['pcap', 'pcapng', 'cap'].includes(lowerExt) || isBase64) {
+        try {
+          const pyScript = path.join(projectRoot, 'scripts', 'infer_pcap.py');
+          console.log(`[MODEL] Spawning Python World Model PCAP Pipeline: ${pyScript} on ${savedFilePath}`);
+
+          const stdout = execFileSync('python', [pyScript, savedFilePath, '50000', '--json'], {
+            cwd: projectRoot,
+            encoding: 'utf-8',
+            maxBuffer: 50 * 1024 * 1024,
+            timeout: 60000
+          });
+
+          const startMarker = '__INFERENCE_JSON_START__';
+          const endMarker = '__INFERENCE_JSON_END__';
+          const startIdx = stdout.indexOf(startMarker);
+          const endIdx = stdout.indexOf(endMarker);
+
+          if (startIdx !== -1 && endIdx !== -1) {
+            const rawJson = stdout.substring(startIdx + startMarker.length, endIdx).trim();
+            const modelResult = JSON.parse(rawJson);
+
+            if (modelResult && modelResult.network && Array.isArray(modelResult.network.hosts) && modelResult.network.hosts.length > 0) {
+              currentHosts = modelResult.network.hosts;
+              currentEdges = modelResult.network.edges || [];
+              customPredictedTarget = modelResult.network.predictedNextTarget || null;
+              activeCapture = modelResult.activeCapture;
+              customTelemetry = modelResult.telemetry || null;
+              customForecastPoints = modelResult.forecastPoints || null;
+              customAlerts = modelResult.alerts || null;
+              isolatedHostIds = [];
+              blockedPorts = {};
+              windowSeq += 1;
+              parsedFromModel = true;
+              console.log(`[MODEL] Successfully ingested PCAP! Hosts: ${currentHosts.length}, Edges: ${currentEdges.length}, Risk: ${customTelemetry?.infiltrationRisk}%`);
+            }
+          }
+        } catch (pyErr: any) {
+          console.warn('[MODEL] Python PCAP neural execution fallback notice:', pyErr.message || pyErr);
+        }
+      }
+
+      // 4. Fallback: If not PCAP or Python execution had missing binary header, parse CSV/text dynamically
+      if (!parsedFromModel) {
+        const contentStr = typeof fileContent === 'string' ? fileContent : '';
+        const ipRegex = /(\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b)/g;
+        const matches = contentStr.match(ipRegex) || [];
+        const uniqueIps = Array.from(new Set(matches)).slice(0, 10);
+
+        const detectedProtocols: string[] = [];
+        const lowerContent = (contentStr + fileName).toLowerCase();
+        if (lowerContent.includes('smb') || lowerContent.includes('445')) detectedProtocols.push('SMB');
+        if (lowerContent.includes('kerberos') || lowerContent.includes('88')) detectedProtocols.push('Kerberos');
+        if (lowerContent.includes('http') || lowerContent.includes('80')) detectedProtocols.push('HTTP');
+        if (lowerContent.includes('tls') || lowerContent.includes('ssl') || lowerContent.includes('443')) detectedProtocols.push('HTTPS');
+        if (lowerContent.includes('dns') || lowerContent.includes('53')) detectedProtocols.push('DNS');
+        if (lowerContent.includes('rdp') || lowerContent.includes('3389')) detectedProtocols.push('RDP');
+        if (lowerContent.includes('ssh') || lowerContent.includes('22')) detectedProtocols.push('SSH');
+        if (detectedProtocols.length === 0) detectedProtocols.push('TCP/IP', 'ARP', 'ICMP');
+
+        const estimatedPackets = Math.max(150, Math.round((fileSize || 102400) / 95));
+        const estimatedFlows = Math.max(12, Math.round(estimatedPackets / 14));
+        const durationSeconds = Math.max(30, Math.round(estimatedPackets / 35));
+
+        // If we found at least 2 distinct IPs in the telemetry
+        if (uniqueIps.length >= 2) {
+          const isPriv = (ip: string) => ip.startsWith('10.') || ip.startsWith('192.168.') || ip.startsWith('172.');
+          const corp = uniqueIps.filter(isPriv);
+          const dmz = uniqueIps.filter((ip) => !isPriv(ip));
+
+          if (corp.length === 0 && dmz.length > 1) {
+            corp.push(...dmz.splice(1));
+          } else if (dmz.length === 0 && corp.length > 1) {
+            dmz.push(...corp.splice(0, 1));
+          }
+
+          const dynamicHosts: HostData[] = [];
+          dmz.forEach((ip, idx) => {
+            dynamicHosts.push({
+              id: `node-${ip.replace(/\./g, '-')}`,
+              name: `EXT-${ip.split('.').pop()}`,
+              ip,
+              role: 'Perimeter / External Actor',
+              segment: 'dmz',
+              status: 'compromised',
+              x: 10 + (idx % 2) * 14,
+              y: 25 + idx * 22,
+              openPorts: [80, 443, 8080],
+              attentionScore: 0.94,
+              os: 'External Host',
+              inboundEdges: 0,
+              outboundEdges: 2
+            });
+          });
+
+          corp.forEach((ip, idx) => {
+            dynamicHosts.push({
+              id: `node-${ip.replace(/\./g, '-')}`,
+              name: idx === 0 ? `SRV-${ip.split('.').pop()}` : `WS-${ip.split('.').pop()}`,
+              ip,
+              role: idx === 0 ? 'Domain Controller / Primary Identity' : `Internal Host ${idx}`,
+              segment: 'corporate',
+              status: idx === 0 ? 'targeted' : 'normal',
+              x: 45 + (idx % 3) * 16,
+              y: 20 + idx * 20,
+              openPorts: idx === 0 ? [445, 135, 3389] : [445, 80],
+              attentionScore: idx === 0 ? 0.92 : 0.42,
+              os: idx === 0 ? 'Windows Server 2022' : 'Enterprise Endpoint',
+              inboundEdges: 2,
+              outboundEdges: 1
+            });
+          });
+
+          currentHosts = dynamicHosts;
+
+          // Build edges connecting DMZ to Corp
+          const dynamicEdges: EdgeData[] = [];
+          if (dmz.length > 0 && corp.length > 0) {
+            dynamicEdges.push({
+              id: 'e-dyn-1',
+              source: `node-${dmz[0].replace(/\./g, '-')}`,
+              target: `node-${corp[0].replace(/\./g, '-')}`,
+              type: 'attack',
+              weight: 0.95,
+              port: 445,
+              protocol: `${detectedProtocols[0] || 'SMB'} (445)`,
+              attention: 0.95
+            });
+          }
+          if (corp.length > 1) {
+            dynamicEdges.push({
+              id: 'e-dyn-2',
+              source: `node-${corp[0].replace(/\./g, '-')}`,
+              target: `node-${corp[1].replace(/\./g, '-')}`,
+              type: 'elevated',
+              weight: 0.65,
+              port: 3389,
+              protocol: 'RDP Sync (3389)',
+              attention: 0.65
+            });
+          }
+          currentEdges = dynamicEdges;
+
+          const targetHost = corp[0];
+          customPredictedTarget = {
+            hostId: `node-${targetHost.replace(/\./g, '-')}`,
+            name: `SRV-${targetHost.split('.').pop()}`,
+            role: 'Domain Controller / Primary Identity',
+            ip: targetHost,
+            segment: 'corporate' as const,
+            os: 'Windows Server 2022 Core',
+            probabilityPercent: 91.5,
+            timeToAttackSeconds: 18.0,
+            timeToAttackLabel: '+18.0s',
+            predictedAttackVector: `${detectedProtocols[0] || 'SMB'} Lateral Access from Ingress Node`,
+            primarySourceId: `node-${dmz[0]?.replace(/\./g, '-') || 'ext'}`,
+            primarySourceName: `EXT-${dmz[0]?.split('.').pop() || 'Ingress'}`,
+            incomingPort: 445,
+            protocol: detectedProtocols[0] || 'SMB / PsExec',
+            mitreTactic: 'TA0008 (Lateral Movement)',
+            mitreTacticCode: 'TA0008',
+            probabilityIssues: [
+              {
+                id: 'iss-csv-1',
+                factor: `High Connection Volume in ${fileName}`,
+                description: `Telemetry records ${estimatedFlows} anomalous flows directed towards ${targetHost}.`,
+                impactScore: 90,
+                severity: 'critical' as const,
+                category: 'protocol_flaw' as const
+              },
+              {
+                id: 'iss-csv-2',
+                factor: `Observed Protocols: ${detectedProtocols.join(', ')}`,
+                description: `Network capture contains active traversal signatures targeting core domain services.`,
+                impactScore: 84,
+                severity: 'high' as const,
+                category: 'network_path' as const
+              }
+            ],
+            recommendedMitigations: [
+              `Isolate ${dmz[0] || 'external ingress'} immediately`,
+              `Block Port 445 on ${targetHost}`,
+              'Invalidate cached administrative sessions'
+            ]
+          };
+        }
+
+        activeCapture = {
+          id: `cap-${Date.now()}`,
+          fileName,
+          fileType: (lowerExt || 'pcap') as any,
+          fileSize: fileSize || 1048576,
+          packetCount: estimatedPackets,
+          flowCount: estimatedFlows,
+          durationSeconds,
+          protocolsDetected: detectedProtocols,
+          threatNodesDetected: currentHosts.filter((h) => h.status === 'compromised' || h.status === 'targeted').length,
+          uploadedAt: new Date().toISOString()
+        };
+
+        isolatedHostIds = [];
+        blockedPorts = {};
+        windowSeq += 1;
+      }
 
       res.json({
         success: true,
-        summary: activeCapture,
+        activeCapture,
         network: {
           hosts: currentHosts,
           edges: currentEdges,
@@ -1057,6 +1093,9 @@ async function startServer() {
     blockedPorts = {};
     activeCapture = null;
     customPredictedTarget = null;
+    customTelemetry = null;
+    customForecastPoints = null;
+    customAlerts = null;
     windowSeq = 842;
 
     res.json({
@@ -1067,6 +1106,9 @@ async function startServer() {
 
   // API Route: Sensor Telemetry
   app.get('/api/telemetry', (req, res) => {
+    if (customTelemetry) {
+      return res.json(customTelemetry);
+    }
     const predicted = computeNextPredictedTarget();
     res.json({
       infiltrationRisk: Math.round(predicted.probabilityPercent),
@@ -1347,6 +1389,9 @@ async function startServer() {
 
   // API Route: Dynamic Alerts Feed from Backend State
   app.get('/api/alerts', (req, res) => {
+    if (customAlerts && Array.isArray(customAlerts) && customAlerts.length > 0) {
+      return res.json(customAlerts);
+    }
     const predicted = computeNextPredictedTarget();
     const alerts: any[] = [];
 

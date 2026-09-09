@@ -67,31 +67,31 @@ export const CaptureUploadModal: React.FC<CaptureUploadModalProps> = ({
       const fileName = file.name;
       const extension = fileName.split('.').pop()?.toLowerCase() || 'other';
 
-      // Read file
       let fileContent = '';
+      let isBase64 = false;
+
       if (['csv', 'json', 'log', 'txt'].includes(extension)) {
+        setProcessingStage(`Reading telemetry text from ${file.name}...`);
         fileContent = await file.text();
+        isBase64 = false;
       } else {
-        // For binary pcap / pcapng, read as base64 or array buffer
-        const buffer = await file.arrayBuffer();
-        const bytes = new Uint8Array(buffer);
-        // Extract readable ASCII strings (IPs, HTTP/SMB headers, etc.)
-        let binaryStr = '';
-        const len = Math.min(bytes.length, 100000);
-        for (let i = 0; i < len; i++) {
-          const c = bytes[i];
-          if ((c >= 32 && c <= 126) || c === 10 || c === 13) {
-            binaryStr += String.fromCharCode(c);
-          }
-        }
-        fileContent = binaryStr;
+        setProcessingStage(`Reading binary PCAP packet streams from ${file.name}...`);
+        const b64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const res = (reader.result as string) || '';
+            const data = res.includes(',') ? res.split(',')[1] : res;
+            resolve(data);
+          };
+          reader.onerror = () => reject(new Error('Failed to read capture file stream.'));
+          reader.readAsDataURL(file);
+        });
+        fileContent = b64;
+        isBase64 = true;
       }
 
-      setProcessingStage('Parsing PCAP frames, flow sessions & IP topology...');
-      await new Promise((r) => setTimeout(r, 450));
-
-      setProcessingStage('Ingesting into World Model Graph Attention Neural Net...');
-      await apiUploadCapture(fileName, extension, fileContent, file.size);
+      setProcessingStage('Executing GNN + Temporal World Model Neural Forward Pass...');
+      await apiUploadCapture(fileName, extension, fileContent, file.size, isBase64);
 
       if (soundEnabled) playCyberTone('success');
       onCaptureLoaded();

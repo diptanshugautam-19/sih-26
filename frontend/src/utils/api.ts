@@ -148,12 +148,13 @@ export async function apiUploadCapture(
   fileName: string,
   fileType: string,
   fileContent: string,
-  fileSize: number
+  fileSize: number,
+  isBase64: boolean = false
 ) {
   const res = await fetch('/api/upload-capture', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fileName, fileType, fileContent, fileSize })
+    body: JSON.stringify({ fileName, fileType, fileContent, fileSize, isBase64 })
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
