@@ -85,8 +85,38 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
   const isMidnight = theme === 'midnight';
 
   const selectedHost = hosts.find((h) => h.id === selectedHostId) || hosts[0];
-  const isApp07Isolated = isolatedHostIds.includes('app-07');
-  const isTargetPortBlocked = predictedNextTarget && (blockedPorts[predictedNextTarget.hostId] || []).includes(predictedNextTarget.incomingPort);
+
+  // Dynamically resolve attacker node and target node from active network state
+  const compromisedNodes = hosts.filter((h) => h.status === 'compromised');
+  const targetedNodes = hosts.filter((h) => h.status === 'targeted');
+
+  const attackerNode =
+    attackedNodes[0] ||
+    compromisedNodes[0] ||
+    hosts.find((h) => h.segment === 'dmz') ||
+    hosts[0];
+
+  const targetNode =
+    (predictedNextTarget ? hosts.find((h) => h.id === predictedNextTarget.hostId) : null) ||
+    targetedNodes[0] ||
+    hosts.find((h) => h.segment === 'corporate') ||
+    hosts[1] ||
+    hosts[0];
+
+  const attackerName = attackerNode?.name || predictedNextTarget?.primarySourceName || 'External Ingress';
+  const attackerRole = attackerNode?.role || 'Compromised Ingress Host';
+  const attackerId = attackerNode?.id || 'node-src';
+  const isAttackerIsolated = isolatedHostIds.includes(attackerId);
+
+  const targetName = predictedNextTarget?.name || targetNode?.name || 'Primary Server';
+  const targetRole = predictedNextTarget?.role || targetNode?.role || 'Domain Controller / Database';
+  const targetIp = predictedNextTarget?.ip || targetNode?.ip || '';
+  const targetId = predictedNextTarget?.hostId || targetNode?.id || '';
+  const targetProb = Math.round(predictedNextTarget?.probabilityPercent ?? (targetNode?.attentionScore ? targetNode.attentionScore * 100 : 90));
+  const targetPort = predictedNextTarget?.incomingPort || targetNode?.openPorts?.[0] || 445;
+  const isTargetPortBlocked = (blockedPorts[targetId] || []).includes(targetPort);
+  const timeToAttack = predictedNextTarget?.timeToAttackLabel || '+18.0s';
+  const targetProtocol = predictedNextTarget?.protocol || 'Network Service';
 
   return (
     <div className="space-y-6">
@@ -124,14 +154,14 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
                 <span>CYBER INCIDENT IN PROGRESS</span>
               </span>
               <span className={`text-xs font-mono ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
-                Predicted attack in <strong className={isLight ? 'text-amber-700 font-bold' : 'text-amber-300 font-bold'}>18 seconds</strong>
+                Predicted attack in <strong className={isLight ? 'text-amber-700 font-bold' : 'text-amber-300 font-bold'}>{timeToAttack}</strong>
               </span>
             </div>
 
             <h2 className={`text-xl sm:text-2xl font-bold font-sans tracking-tight leading-snug ${
               isLight ? 'text-slate-900' : 'text-white'
             }`}>
-              An attacker has infiltrated <span className="text-rose-500 underline decoration-rose-500/50">APP-07</span> and is attempting to breach the <span className={isLight ? 'text-amber-700 underline decoration-amber-500/50' : 'text-amber-300 underline decoration-amber-500/50'}>Central Main Server</span>.
+              An attacker has infiltrated <span className="text-rose-500 underline decoration-rose-500/50">{attackerName}</span> and is attempting to breach <span className={isLight ? 'text-amber-700 underline decoration-amber-500/50' : 'text-amber-300 underline decoration-amber-500/50'}>{targetName} {targetIp ? `(${targetIp})` : ''}</span>.
             </h2>
 
             {/* 3 Plain English Steps */}
@@ -144,7 +174,7 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
                   <span>1. Where They Entered</span>
                 </div>
                 <p className={isLight ? 'text-slate-700 leading-relaxed font-sans' : 'text-slate-300 leading-relaxed font-sans'}>
-                  <strong>APP-07 (Web Server)</strong> was hacked from outside internet.
+                  <strong>{attackerName} ({attackerRole})</strong> was compromised from the network perimeter.
                 </p>
               </div>
 
@@ -156,7 +186,7 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
                   <span>2. Who Is in Danger</span>
                 </div>
                 <p className={isLight ? 'text-slate-700 leading-relaxed font-sans' : 'text-slate-300 leading-relaxed font-sans'}>
-                  <strong>SRV-DC01 (Main Server)</strong> has a <strong className="text-rose-500 font-mono">94%</strong> chance of being taken over.
+                  <strong>{targetName} ({targetRole})</strong> has a <strong className="text-rose-500 font-mono">{targetProb}%</strong> chance of being taken over.
                 </p>
               </div>
 
@@ -168,7 +198,7 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
                   <span>3. Recommended Action</span>
                 </div>
                 <p className={isLight ? 'text-slate-700 leading-relaxed font-sans' : 'text-slate-300 leading-relaxed font-sans'}>
-                  Click <strong>Quarantine</strong> below to cut off the attacker's path.
+                  Click <strong>Quarantine</strong> below to cut off the attacker's trajectory.
                 </p>
               </div>
             </div>
@@ -179,10 +209,10 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
             <button
               onClick={() => {
                 if (soundEnabled) playCyberTone('policy');
-                onToggleIsolate('app-07');
+                onToggleIsolate(attackerId);
               }}
               className={`flex items-start space-x-3 p-3.5 rounded-xl border transition-all text-left ${
-                isApp07Isolated
+                isAttackerIsolated
                   ? isLight
                     ? 'border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
                     : 'border-emerald-500/50 bg-emerald-950/40 text-emerald-100 hover:bg-emerald-900/50'
@@ -190,7 +220,7 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
               }`}
             >
               <div className="p-2 rounded-lg bg-black/20 mt-0.5">
-                {isApp07Isolated ? (
+                {isAttackerIsolated ? (
                   <ShieldCheck className="w-5 h-5 text-emerald-400" />
                 ) : (
                   <ShieldOff className="w-5 h-5 text-white" />
@@ -198,21 +228,21 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
               </div>
               <div>
                 <div className="font-bold text-sm font-sans">
-                  {isApp07Isolated ? 'APP-07 is Quarantined ✓' : 'Quarantine APP-07'}
+                  {isAttackerIsolated ? `${attackerName} is Quarantined ✓` : `Quarantine ${attackerName}`}
                 </div>
-                <p className={`text-[11px] mt-0.5 leading-tight ${isApp07Isolated ? (isLight ? 'text-emerald-700' : 'text-emerald-300') : 'text-rose-100'}`}>
-                  {isApp07Isolated
+                <p className={`text-[11px] mt-0.5 leading-tight ${isAttackerIsolated ? (isLight ? 'text-emerald-700' : 'text-emerald-300') : 'text-rose-100'}`}>
+                  {isAttackerIsolated
                     ? 'Infected machine unplugged. Attack cannot spread.'
-                    : 'Unplugs the hacked server so virus cannot jump.'}
+                    : `Unplugs ${attackerName} so virus cannot jump.`}
                 </p>
               </div>
             </button>
 
-            {predictedNextTarget && (
+            {targetId && (
               <button
                 onClick={() => {
                   if (soundEnabled) playCyberTone('policy');
-                  onQuickMitigate(predictedNextTarget.hostId, predictedNextTarget.incomingPort);
+                  onQuickMitigate(targetId, targetPort);
                 }}
                 className={`flex items-start space-x-3 p-3.5 rounded-xl border transition-all text-left ${
                   isTargetPortBlocked
@@ -229,12 +259,12 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
                 </div>
                 <div>
                   <div className="font-bold text-sm font-sans">
-                    {isTargetPortBlocked ? 'Port 445 is Locked ✓' : 'Lock Port 445 on Main Server'}
+                    {isTargetPortBlocked ? `Port ${targetPort} is Locked ✓` : `Lock Port ${targetPort} on ${targetName}`}
                   </div>
                   <p className={`text-[11px] mt-0.5 leading-tight ${isTargetPortBlocked ? (isLight ? 'text-emerald-700' : 'text-emerald-300') : 'text-amber-100'}`}>
                     {isTargetPortBlocked
-                      ? 'Door closed. Remote file execution blocked.'
-                      : 'Closes the file-sharing door the hacker is using.'}
+                      ? 'Access port locked. Infiltration path severed.'
+                      : `Blocks incoming ${targetProtocol} traffic on port ${targetPort}.`}
                   </p>
                 </div>
               </button>
@@ -283,7 +313,7 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
             }`}
           >
             <AlertTriangle className="w-4 h-4 text-amber-500" />
-            <span>🎯 Next Target in Danger (SRV-DC01 · 94%)</span>
+            <span>🎯 Next Target in Danger ({targetName} · {targetProb}%)</span>
           </button>
 
           <button
@@ -575,9 +605,9 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
                     <div className="font-bold text-slate-400 uppercase text-[10px] mb-1">
                       What happened to this machine:
                     </div>
-                    {node.id === 'app-07'
-                      ? 'Attacker found an unpatched vulnerability on the public web server and gained remote root execution.'
-                      : 'Finance employee opened a malicious email attachment that connected back to the attacker.'}
+                    {node.role?.includes('External') || node.segment === 'dmz'
+                      ? `External actor / ingress endpoint (${node.ip}) compromised via perimeter vulnerability or open ports (${node.openPorts.slice(0, 3).join(', ')}).`
+                      : `Internal enterprise host (${node.name} - ${node.ip}) compromised. Inbound anomalous traversal detected with anomaly attention score ${Math.round(node.attentionScore * 100)}%.`}
                   </div>
 
                   <button
@@ -639,7 +669,7 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
               </div>
               <h4 className={`font-bold text-base font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>The Break-In</h4>
               <p className={`text-xs leading-relaxed font-sans ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                A hacker breaks into an initial computer (like your public website server <strong>APP-07</strong>). That computer is now marked with a 🔴 <strong>Infected</strong> badge.
+                A hacker gains initial foothold on <strong>{attackerName}</strong> ({attackerRole}). That computer is marked with a 🔴 <strong>Infected</strong> badge.
               </p>
             </div>
 
@@ -651,7 +681,7 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
               </div>
               <h4 className={`font-bold text-base font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>The Jump (Lateral Movement)</h4>
               <p className={`text-xs leading-relaxed font-sans ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                Hackers do not stop at one computer. They probe internal cables to jump to the most valuable machine (the <strong>Central Main Server</strong>).
+                Hackers do not stop at one computer. They probe internal paths to jump to high-value infrastructure (<strong>{targetName}</strong> - {targetRole}).
               </p>
             </div>
 
@@ -663,7 +693,7 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
               </div>
               <h4 className={`font-bold text-base font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>Stopping It in Time</h4>
               <p className={`text-xs leading-relaxed font-sans ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                Clicking <strong>Quarantine</strong> instantly cuts the digital wire, trapping the hacker in the infected machine before they reach your main server.
+                Clicking <strong>Quarantine</strong> instantly cuts the digital connection, isolating {attackerName} before {targetName} is breached.
               </p>
             </div>
           </div>
@@ -790,7 +820,7 @@ const TargetDetailSection: React.FC<TargetDetailProps> = ({
                 <span>Suspicious Traffic Detected</span>
               </div>
               <p className={isLight ? 'text-slate-600 leading-relaxed font-sans' : 'text-slate-300 leading-relaxed font-sans'}>
-                Network spikes on <strong>Port {predictedNextTarget.incomingPort} (SMB / Windows File Sharing)</strong> from infected machine APP-07.
+                Network spikes on <strong>Port {predictedNextTarget.incomingPort} ({predictedNextTarget.protocol || 'Protocol'})</strong> from infected machine {predictedNextTarget.primarySourceName || attackerName}.
               </p>
             </div>
 
@@ -802,7 +832,7 @@ const TargetDetailSection: React.FC<TargetDetailProps> = ({
                 <span>Proactive Reaction Window</span>
               </div>
               <p className={isLight ? 'text-slate-600 leading-relaxed font-sans' : 'text-slate-300 leading-relaxed font-sans'}>
-                You have approximately <strong>18 seconds</strong> to take protective action before authentication tokens are compromised.
+                You have approximately <strong>{predictedNextTarget.timeToAttackLabel || '15 seconds'}</strong> to take protective action before authentication tokens are compromised.
               </p>
             </div>
           </div>

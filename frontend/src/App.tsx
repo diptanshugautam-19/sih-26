@@ -133,7 +133,7 @@ export default function App() {
   const [showCounterfactualInForecast, setShowCounterfactualInForecast] = useState(true);
 
   // Load live data from real Express backend
-  const loadBackendData = useCallback(async () => {
+  const loadBackendData = useCallback(async (forceReselect: boolean = false) => {
     try {
       setIsRefreshing(true);
       const networkData = await fetchNetworkState();
@@ -146,6 +146,26 @@ export default function App() {
       setWindowSeq(networkData.windowSeq);
       setActiveCapture(networkData.activeCapture || null);
       setBackendConnected(true);
+
+      // Dynamically select and synchronize active edge and host targets
+      let edgeToSelect = (!forceReselect && selectedEdge) ? networkData.edges.find((e) => e.id === selectedEdge.id) : null;
+      if (!edgeToSelect && networkData.edges.length > 0) {
+        const tgtHostId = networkData.predictedNextTarget?.hostId;
+        edgeToSelect =
+          networkData.edges.find((e) => e.target === tgtHostId) ||
+          networkData.edges.find((e) => e.type === 'attack') ||
+          networkData.edges[0];
+      }
+
+      if (edgeToSelect) {
+        setSelectedEdge(edgeToSelect);
+        setSelectedHostId(edgeToSelect.source);
+        setSelectedTargetHostId(edgeToSelect.target);
+        setSelectedPort(edgeToSelect.port);
+      } else if (networkData.hosts.length > 0) {
+        setSelectedHostId(networkData.hosts[0].id);
+        setSelectedTargetHostId(networkData.predictedNextTarget?.hostId || networkData.hosts[0].id);
+      }
 
       // Fetch telemetry
       const tel = await fetchTelemetry();
@@ -179,7 +199,7 @@ export default function App() {
       }
 
       // Fetch explainability for currently selected edge from backend
-      const currentEdgeId = selectedEdge ? selectedEdge.id : (networkData.edges[0]?.id);
+      const currentEdgeId = edgeToSelect ? edgeToSelect.id : (networkData.edges[0]?.id);
       if (currentEdgeId) {
         const expData = await fetchExplainability(currentEdgeId).catch(() => null);
         if (expData) {
@@ -501,7 +521,7 @@ export default function App() {
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         activeCapture={activeCapture}
-        onCaptureLoaded={loadBackendData}
+        onCaptureLoaded={() => loadBackendData(true)}
         soundEnabled={soundEnabled}
         theme={theme}
       />

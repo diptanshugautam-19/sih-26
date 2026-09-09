@@ -231,6 +231,48 @@ function computeNextPredictedTarget() {
     return customPredictedTarget;
   }
 
+  // If custom target was isolated or custom PCAP is active, find next non-isolated corporate host dynamically
+  if (customPredictedTarget) {
+    const candidate = currentHosts.find(
+      (h) => !isolatedHostIds.includes(h.id) && h.status !== 'compromised' && h.segment === 'corporate'
+    ) || currentHosts.find((h) => !isolatedHostIds.includes(h.id) && h.id !== customPredictedTarget.hostId);
+
+    if (candidate) {
+      return {
+        hostId: candidate.id,
+        name: candidate.name,
+        role: candidate.role,
+        ip: candidate.ip,
+        segment: candidate.segment,
+        os: candidate.os,
+        probabilityPercent: 18.5,
+        timeToAttackSeconds: 45.0,
+        timeToAttackLabel: '+45.0s',
+        predictedAttackVector: `Residual probe attempt targeting ${candidate.name}`,
+        primarySourceId: customPredictedTarget.primarySourceId,
+        primarySourceName: customPredictedTarget.primarySourceName,
+        incomingPort: candidate.openPorts[0] || 80,
+        protocol: 'TCP / Inspected Flow',
+        mitreTactic: 'Contained (Threat Quarantined)',
+        mitreTacticCode: 'TA0040',
+        probabilityIssues: [
+          {
+            id: 'iss-mit-1',
+            factor: 'Primary Infiltration Target Quarantined',
+            description: `Host ${customPredictedTarget.name} has been successfully isolated from network. Threat propagation arrested.`,
+            impactScore: 20,
+            severity: 'low' as const,
+            category: 'network_path' as const
+          }
+        ],
+        recommendedMitigations: [
+          'Maintain isolation until host memory analysis completes',
+          'Review perimeter ingress access control lists'
+        ]
+      };
+    }
+  }
+
   const isAppIsolated = isolatedHostIds.includes('app-07');
   const isDcIsolated = isolatedHostIds.includes('srv-dc01');
   const isSmbBlocked = (blockedPorts['srv-dc01'] || []).includes(445) || (blockedPorts['app-07'] || []).includes(445);
@@ -451,7 +493,7 @@ async function startServer() {
     });
 
     const attackedNodes = updatedHosts.filter(
-      (h) => h.status === 'compromised' || (h.id === 'c2-ext' || h.id === 'app-07')
+      (h) => h.status === 'compromised' || (currentEdges.some((e) => e.type === 'attack' && e.source === h.id))
     );
 
     const predictedNextTarget = computeNextPredictedTarget();
@@ -844,7 +886,9 @@ async function startServer() {
       console.log(`[INGESTION] Received upload: ${fileName} (${fileType}, ${(fileSize / 1024).toFixed(1)} KB, isBase64: ${!!isBase64})`);
 
       // 1. Ensure upload directory exists
-      const projectRoot = path.resolve(process.cwd(), '..');
+      const projectRoot = fs.existsSync(path.join(process.cwd(), 'scripts', 'infer_pcap.py'))
+        ? process.cwd()
+        : path.resolve(process.cwd(), '..');
       const uploadsDir = path.join(projectRoot, 'data', 'uploads');
       if (!fs.existsSync(uploadsDir)) {
         fs.mkdirSync(uploadsDir, { recursive: true });
@@ -902,7 +946,8 @@ async function startServer() {
             }
           }
         } catch (pyErr: any) {
-          console.warn('[MODEL] Python PCAP neural execution fallback notice:', pyErr.message || pyErr);
+          console.warn('[MODEL] Python PCAP neural execution notice:', pyErr.message || pyErr);
+          if (pyErr.stderr) console.warn('[MODEL STDERR]:', pyErr.stderr);
         }
       }
 
@@ -1281,7 +1326,7 @@ async function startServer() {
     const risk = Math.round(predicted.probabilityPercent);
     const isMitigated = isolatedHostIds.length > 0 || Object.keys(blockedPorts).some(k => (blockedPorts[k] || []).length > 0);
 
-    const points = [
+    let points = [
       { timeLabel: '-30s', seconds: -30, actual: Math.max(10, Math.round(risk * 0.42)), baseline: Math.max(10, Math.round(risk * 0.42)), ciUpper: Math.max(15, Math.round(risk * 0.48)), ciLower: Math.max(5, Math.round(risk * 0.36)) },
       { timeLabel: '-20s', seconds: -20, actual: Math.max(20, Math.round(risk * 0.62)), baseline: Math.max(20, Math.round(risk * 0.62)), ciUpper: Math.max(25, Math.round(risk * 0.68)), ciLower: Math.max(15, Math.round(risk * 0.56)) },
       { timeLabel: '-10s', seconds: -10, actual: Math.max(35, Math.round(risk * 0.82)), baseline: Math.max(35, Math.round(risk * 0.82)), ciUpper: Math.max(40, Math.round(risk * 0.88)), ciLower: Math.max(30, Math.round(risk * 0.76)) },
@@ -1291,6 +1336,10 @@ async function startServer() {
       { timeLabel: '+30s', seconds: 30, baseline: Math.min(100, Math.round(risk * 1.08)), counterfactual: isMitigated ? Math.min(12, Math.round(risk * 0.16)) : Math.round(risk * 0.62), ciUpper: Math.min(100, risk + 12), ciLower: Math.max(0, risk - 10) },
       { timeLabel: '+60s', seconds: 60, baseline: Math.min(100, Math.round(risk * 1.09)), counterfactual: isMitigated ? Math.min(10, Math.round(risk * 0.12)) : Math.round(risk * 0.52), ciUpper: Math.min(100, risk + 14), ciLower: Math.max(0, risk - 12) }
     ];
+
+    if (customForecastPoints && Array.isArray(customForecastPoints) && customForecastPoints.length > 0) {
+      points = customForecastPoints;
+    }
 
     const killChainStages = [
       { step: 1, name: 'Reconnaissance', status: 'completed' as const, tacticId: 'TA0043' },

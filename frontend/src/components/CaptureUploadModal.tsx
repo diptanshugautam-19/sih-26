@@ -21,7 +21,7 @@ interface CaptureUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   activeCapture: CaptureMetadata | null;
-  onCaptureLoaded: () => void;
+  onCaptureLoaded: () => void | Promise<void>;
   soundEnabled: boolean;
   theme?: AppTheme;
 }
@@ -93,8 +93,8 @@ export const CaptureUploadModal: React.FC<CaptureUploadModalProps> = ({
       setProcessingStage('Executing GNN + Temporal World Model Neural Forward Pass...');
       await apiUploadCapture(fileName, extension, fileContent, file.size, isBase64);
 
-      if (soundEnabled) playCyberTone('success');
-      onCaptureLoaded();
+      setProcessingStage('Updating dashboard and threat topology views...');
+      await onCaptureLoaded();
       onClose();
     } catch (err: any) {
       console.error('Capture upload error:', err);

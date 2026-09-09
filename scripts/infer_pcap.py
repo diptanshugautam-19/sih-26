@@ -735,13 +735,13 @@ def run_pcap_pipeline_json(pcap_path: str, checkpoint_path: str | None = None, m
     # 8. Forecast Points (-15s to +15s)
     base_risk = infil_prob * 100.0
     forecast_points = [
-        {"time": "-15s", "predictedRisk": max(5, round(base_risk * 0.45)), "historicalRisk": max(5, round(base_risk * 0.40)), "uncertainty": 4.2},
-        {"time": "-10s", "predictedRisk": max(8, round(base_risk * 0.60)), "historicalRisk": max(8, round(base_risk * 0.55)), "uncertainty": 4.8},
-        {"time": "-5s", "predictedRisk": max(12, round(base_risk * 0.82)), "historicalRisk": max(12, round(base_risk * 0.80)), "uncertainty": 5.1},
-        {"time": "0s (NOW)", "predictedRisk": round(base_risk), "historicalRisk": round(base_risk), "uncertainty": 5.8},
-        {"time": "+5s", "predictedRisk": min(99, round(base_risk * 1.04)), "simulatedRisk": max(10, round(base_risk * 0.22)), "uncertainty": 6.4},
-        {"time": "+10s", "predictedRisk": min(99, round(base_risk * 1.08)), "simulatedRisk": max(8, round(base_risk * 0.16)), "uncertainty": 7.2},
-        {"time": "+15s", "predictedRisk": min(99, round(base_risk * 1.12)), "simulatedRisk": max(8, round(base_risk * 0.12)), "uncertainty": 8.0},
+        {"timeLabel": "-15s", "seconds": -15, "actual": max(5, round(base_risk * 0.45)), "baseline": max(5, round(base_risk * 0.40)), "ciUpper": min(100, round(base_risk * 0.50)), "ciLower": max(0, round(base_risk * 0.35))},
+        {"timeLabel": "-10s", "seconds": -10, "actual": max(8, round(base_risk * 0.60)), "baseline": max(8, round(base_risk * 0.55)), "ciUpper": min(100, round(base_risk * 0.65)), "ciLower": max(0, round(base_risk * 0.50))},
+        {"timeLabel": "-5s", "seconds": -5, "actual": max(12, round(base_risk * 0.82)), "baseline": max(12, round(base_risk * 0.80)), "ciUpper": min(100, round(base_risk * 0.88)), "ciLower": max(0, round(base_risk * 0.74))},
+        {"timeLabel": "0s (NOW)", "seconds": 0, "isNow": True, "actual": round(base_risk), "baseline": round(base_risk), "counterfactual": round(base_risk), "ciUpper": min(100, round(base_risk + 4)), "ciLower": max(0, round(base_risk - 4))},
+        {"timeLabel": "+5s", "seconds": 5, "baseline": min(99, round(base_risk * 1.04)), "counterfactual": max(10, round(base_risk * 0.22)), "ciUpper": min(100, round(base_risk + 8)), "ciLower": max(0, round(base_risk - 6))},
+        {"timeLabel": "+10s", "seconds": 10, "baseline": min(99, round(base_risk * 1.08)), "counterfactual": max(8, round(base_risk * 0.16)), "ciUpper": min(100, round(base_risk + 10)), "ciLower": max(0, round(base_risk - 8))},
+        {"timeLabel": "+15s", "seconds": 15, "baseline": min(99, round(base_risk * 1.12)), "counterfactual": max(8, round(base_risk * 0.12)), "ciUpper": min(100, round(base_risk + 12)), "ciLower": max(0, round(base_risk - 10))},
     ]
 
     # 9. Dynamic Alerts

@@ -50,6 +50,8 @@ def read_pcap_fast(pcap_path: str | Path, packet_limit: Optional[int] = None) ->
         else:
             endian = "<"
 
+        link_type = struct.unpack(endian + "I", global_hdr[20:24])[0] if len(global_hdr) >= 24 else 1
+
         count = 0
         while True:
             pkt_hdr = f.read(16)
@@ -60,23 +62,40 @@ def read_pcap_fast(pcap_path: str | Path, packet_limit: Optional[int] = None) ->
             pkt_data = f.read(incl_len)
             count += 1
 
-            if len(pkt_data) < 14:
+            if len(pkt_data) < 20:
                 continue
 
-            # Ethernet header
-            eth_type = struct.unpack("!H", pkt_data[12:14])[0]
-            eth_off = 14
-            if eth_type == 0x8100:  # 802.1Q VLAN
-                if len(pkt_data) < 18:
-                    continue
-                eth_type = struct.unpack("!H", pkt_data[16:18])[0]
-                eth_off = 18
+            # Determine IPv4 header offset
+            ip_off = -1
+            if link_type in (101, 228) or (pkt_data[0] >> 4) == 4:
+                # Raw IP packet (DLT_RAW / DLT_IPV4)
+                ip_off = 0
+            elif link_type == 113 and len(pkt_data) >= 36:
+                # Linux Cooked Capture SLL (16-byte header)
+                proto_sll = struct.unpack("!H", pkt_data[14:16])[0]
+                if proto_sll == 0x0800:
+                    ip_off = 16
+            elif len(pkt_data) >= 34:
+                # Standard Ethernet (14-byte MAC header)
+                eth_type = struct.unpack("!H", pkt_data[12:14])[0]
+                if eth_type == 0x8100 and len(pkt_data) >= 38:  # 802.1Q VLAN
+                    eth_type = struct.unpack("!H", pkt_data[16:18])[0]
+                    if eth_type == 0x0800:
+                        ip_off = 18
+                elif eth_type == 0x0800:
+                    ip_off = 14
 
-            # Only IPv4 (0x0800)
-            if eth_type != 0x0800 or len(pkt_data) < eth_off + 20:
+            # Fallback auto-detection if link_type parsing did not match
+            if ip_off < 0:
+                if len(pkt_data) >= 20 and (pkt_data[0] >> 4) == 4:
+                    ip_off = 0
+                elif len(pkt_data) >= 34 and (pkt_data[14] >> 4) == 4:
+                    ip_off = 14
+
+            if ip_off < 0 or len(pkt_data) < ip_off + 20:
                 continue
 
-            ip_hdr = pkt_data[eth_off:eth_off + 20]
+            ip_hdr = pkt_data[ip_off:ip_off + 20]
             ihl = (ip_hdr[0] & 0x0F) * 4
             ttl = ip_hdr[8]
             proto = ip_hdr[9]
@@ -89,7 +108,7 @@ def read_pcap_fast(pcap_path: str | Path, packet_limit: Optional[int] = None) ->
             src_ip = socket.inet_ntoa(ip_hdr[12:16])
             dst_ip = socket.inet_ntoa(ip_hdr[16:20])
 
-            l4_off = eth_off + ihl
+            l4_off = ip_off + ihl
             declared_payload = max(0, ip_total_len - ihl)
             avail_payload = max(0, len(pkt_data) - l4_off)
             payload_size = min(declared_payload, avail_payload)
