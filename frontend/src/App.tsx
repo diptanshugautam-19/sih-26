@@ -256,10 +256,26 @@ export default function App() {
     }
   };
 
+  // Handler for host selection (clicks on graph nodes or host selector buttons)
+  const handleSelectHost = async (hostId: string) => {
+    setSelectedHostId(hostId);
+    setSelectedTargetHostId(hostId);
+
+    // Auto-pick connected traffic edge so edge metrics and explainability align with the clicked node
+    const connectedEdges = edges.filter((e) => e.source === hostId || e.target === hostId);
+    const primaryEdge =
+      connectedEdges.find((e) => e.target === hostId && e.type === 'attack') ||
+      connectedEdges.find((e) => e.source === hostId && e.type === 'attack') ||
+      connectedEdges[0];
+
+    if (primaryEdge) {
+      handleSelectEdge(primaryEdge);
+    }
+  };
+
   // Handler for source button click
   const handleSelectSource = (sourceId: string) => {
-    const matchingEdge = edges.find((e) => e.source === sourceId) || edges[0];
-    handleSelectEdge(matchingEdge);
+    handleSelectHost(sourceId);
   };
 
   // Handler to isolate a host via backend API
@@ -393,10 +409,7 @@ export default function App() {
             attackedNodes={attackedNodes}
             predictedNextTarget={predictedNextTarget}
             selectedHostId={selectedHostId}
-            onSelectHost={(id) => {
-              setSelectedHostId(id);
-              setSelectedTargetHostId(id);
-            }}
+            onSelectHost={handleSelectHost}
             selectedEdgeId={selectedEdge.id}
             onSelectEdge={handleSelectEdge}
             isolatedHostIds={isolatedHostIds}

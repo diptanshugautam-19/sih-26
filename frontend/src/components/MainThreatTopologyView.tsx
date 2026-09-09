@@ -21,7 +21,8 @@ import {
   SlidersHorizontal,
   ChevronRight,
   Activity,
-  Upload
+  Upload,
+  GitFork
 } from 'lucide-react';
 import {
   NetworkHost,
@@ -435,73 +436,271 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
                 theme={theme}
               />
 
-              {/* Selected Host Explanatory Card Underneath Map */}
-              {selectedHost && (
-                <div className={`mt-4 p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors ${
-                  isLight
-                    ? 'bg-slate-50 border-slate-200'
-                    : isMidnight
-                    ? 'bg-[#071329] border-[#17386c]'
-                    : 'bg-slate-900/60 border-slate-700/60'
-                }`}>
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-mono uppercase text-cyan-500 font-bold">
-                        Selected Computer:
-                      </span>
-                      <span className={`font-bold text-sm font-mono ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                        {selectedHost.name} ({selectedHost.ip})
-                      </span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        isolatedHostIds.includes(selectedHost.id)
-                          ? 'bg-slate-700 text-slate-300'
-                          : selectedHost.status === 'compromised'
-                          ? 'bg-rose-500/20 text-rose-500 border border-rose-500/40'
-                          : selectedHost.id === 'srv-dc01'
-                          ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40'
-                          : 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/40'
+              {/* Interactive Node Switcher Strip */}
+              <div className={`mt-3 pt-3 border-t flex flex-wrap items-center gap-2 ${
+                isLight ? 'border-slate-200' : 'border-slate-700/60'
+              }`}>
+                <span className="text-[11px] font-mono text-slate-400 uppercase font-bold mr-1">
+                  Inspect Any Node ({hosts.length}):
+                </span>
+                {hosts.map((h) => {
+                  const isSel = h.id === selectedHost.id;
+                  const isComp = h.status === 'compromised';
+                  const isTgt = h.status === 'targeted';
+                  const isIso = isolatedHostIds.includes(h.id);
+                  return (
+                    <button
+                      key={h.id}
+                      onClick={() => {
+                        if (soundEnabled) playCyberTone('click');
+                        onSelectHost(h.id);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center space-x-1.5 ${
+                        isSel
+                          ? isLight
+                            ? 'bg-cyan-600 text-white shadow-md ring-2 ring-cyan-400'
+                            : 'bg-cyan-500 text-slate-950 font-black shadow-[0_0_15px_rgba(6,182,212,0.4)] ring-2 ring-cyan-300'
+                          : isLight
+                          ? 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                          : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-700'
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${
+                        isIso ? 'bg-slate-400' : isComp ? 'bg-rose-500 animate-pulse' : isTgt ? 'bg-amber-400' : 'bg-emerald-400'
+                      }`} />
+                      <span>{h.name}</span>
+                      <span className="text-[10px] opacity-70">({h.ip})</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Comprehensive Selected Host Properties & Control Panel */}
+              {selectedHost && (() => {
+                const isIso = isolatedHostIds.includes(selectedHost.id);
+                const isComp = selectedHost.status === 'compromised';
+                const isTgt = selectedHost.status === 'targeted';
+                const nodeRisk = Math.round((selectedHost.attentionScore || (isTgt ? 0.90 : isComp ? 0.92 : 0.35)) * 100);
+                const inboundFlows = edges.filter((e) => e.target === selectedHost.id);
+                const outboundFlows = edges.filter((e) => e.source === selectedHost.id);
+
+                return (
+                  <div className={`mt-3 p-5 rounded-2xl border transition-all space-y-4 shadow-lg ${
+                    isIso
+                      ? isLight
+                        ? 'bg-slate-100 border-slate-300 text-slate-800'
+                        : 'bg-slate-900/90 border-slate-700 text-slate-200'
+                      : isComp
+                      ? isLight
+                        ? 'bg-rose-50/90 border-rose-300 text-rose-950'
+                        : 'bg-rose-950/30 border-rose-900/60 text-rose-100'
+                      : isTgt
+                      ? isLight
+                        ? 'bg-amber-50/90 border-amber-300 text-amber-950'
+                        : 'bg-amber-950/30 border-amber-900/60 text-amber-100'
+                      : isLight
+                      ? 'bg-slate-50 border-slate-200 text-slate-800'
+                      : isMidnight
+                      ? 'bg-[#071329] border-[#17386c] text-slate-100'
+                      : 'bg-slate-900/60 border-slate-700/60 text-slate-100'
+                  }`}>
+                    {/* Header: Name, IP, Role, Security Badge */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3 border-slate-200/60 dark:border-slate-700/60">
+                      <div className="flex items-center space-x-3">
+                        <div className={`p-2.5 rounded-xl border ${
+                          isComp
+                            ? 'bg-rose-500/20 border-rose-500/40 text-rose-500'
+                            : isTgt
+                            ? 'bg-amber-500/20 border-amber-500/40 text-amber-500'
+                            : 'bg-cyan-500/20 border-cyan-500/40 text-cyan-500'
+                        }`}>
+                          <Server className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <h4 className="text-base font-bold font-mono tracking-tight">
+                              {selectedHost.name}
+                            </h4>
+                            <span className="text-xs font-mono text-cyan-600 dark:text-cyan-400 font-bold">
+                              {selectedHost.ip}
+                            </span>
+                            <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded border bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                              {selectedHost.segment.toUpperCase()}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            {selectedHost.role} · OS: <strong className="text-slate-700 dark:text-slate-200">{selectedHost.os}</strong>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Security Status Tag */}
+                      <span className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold border shrink-0 ${
+                        isIso
+                          ? 'bg-slate-700 text-slate-200 border-slate-600'
+                          : isComp
+                          ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500/50 animate-pulse'
+                          : isTgt
+                          ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/50'
+                          : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/50'
                       }`}>
-                        {isolatedHostIds.includes(selectedHost.id)
-                          ? 'QUARANTINED (UNPLUGGED)'
-                          : selectedHost.status === 'compromised'
-                          ? 'INFECTED'
-                          : selectedHost.id === 'srv-dc01'
-                          ? 'IN DANGER (94%)'
-                          : 'SAFE'}
+                        {isIso
+                          ? '🛡️ QUARANTINED (ISOLATED)'
+                          : isComp
+                          ? '🔴 INFECTED (ACTIVE ATTACKER)'
+                          : isTgt
+                          ? `⚠️ IN IMMEDIATE DANGER (${nodeRisk}%)`
+                          : '🟢 HEALTHY BASELINE'}
                       </span>
                     </div>
-                    <p className={`text-xs font-sans ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-                      {selectedHost.role} · Operating System: {selectedHost.os} · Open Ports: {selectedHost.openPorts.join(', ')}
-                    </p>
-                  </div>
 
-                  <button
-                    onClick={() => {
-                      if (soundEnabled) playCyberTone('click');
-                      onToggleIsolate(selectedHost.id);
-                    }}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold font-sans transition-all flex items-center space-x-2 ${
-                      isolatedHostIds.includes(selectedHost.id)
-                        ? isLight
-                          ? 'border border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          : 'border border-emerald-500/40 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50'
-                        : 'border border-rose-500 bg-rose-600 hover:bg-rose-700 text-white shadow-md'
-                    }`}
-                  >
-                    {isolatedHostIds.includes(selectedHost.id) ? (
-                      <>
-                        <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                        <span>Plug Back In</span>
-                      </>
-                    ) : (
-                      <>
-                        <ShieldOff className="w-4 h-4 text-white" />
-                        <span>Unplug / Quarantine Machine</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
+                    {/* Properties Grid: Ports, Attention, Inbound/Outbound */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-sans">
+                      {/* 1. GNN Attention Score */}
+                      <div className={`p-3 rounded-xl border ${
+                        isLight ? 'bg-white/80 border-slate-200' : 'bg-slate-800/60 border-slate-700/60'
+                      }`}>
+                        <div className="text-[10px] font-mono uppercase text-slate-400 font-bold mb-1">
+                          GNN Attention / Risk
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className={`text-base font-bold font-mono ${
+                            nodeRisk > 70 ? 'text-rose-500' : nodeRisk > 40 ? 'text-amber-500' : 'text-emerald-500'
+                          }`}>
+                            {nodeRisk}%
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">Neural Pressure</span>
+                        </div>
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              nodeRisk > 70 ? 'bg-rose-500' : nodeRisk > 40 ? 'bg-amber-400' : 'bg-emerald-400'
+                            }`}
+                            style={{ width: `${nodeRisk}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 2. Open Ports */}
+                      <div className={`p-3 rounded-xl border ${
+                        isLight ? 'bg-white/80 border-slate-200' : 'bg-slate-800/60 border-slate-700/60'
+                      }`}>
+                        <div className="text-[10px] font-mono uppercase text-slate-400 font-bold mb-1">
+                          Open Services / Ports ({selectedHost.openPorts.length})
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {selectedHost.openPorts.map((p) => (
+                            <span
+                              key={p}
+                              className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800"
+                            >
+                              Port {p}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 3. Inbound Traffic Flows */}
+                      <div className={`p-3 rounded-xl border ${
+                        isLight ? 'bg-white/80 border-slate-200' : 'bg-slate-800/60 border-slate-700/60'
+                      }`}>
+                        <div className="text-[10px] font-mono uppercase text-slate-400 font-bold mb-1">
+                          Inbound Flows ({inboundFlows.length})
+                        </div>
+                        {inboundFlows.length > 0 ? (
+                          <div className="space-y-1 mt-1 max-h-16 overflow-y-auto">
+                            {inboundFlows.map((e) => {
+                              const src = hosts.find((h) => h.id === e.source);
+                              return (
+                                <div key={e.id} className="text-[11px] font-mono text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                                  <span>{src?.name || e.source}</span>
+                                  <span className="text-cyan-600 dark:text-cyan-400">{e.protocol}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">No incoming links</span>
+                        )}
+                      </div>
+
+                      {/* 4. Outbound Traffic Flows */}
+                      <div className={`p-3 rounded-xl border ${
+                        isLight ? 'bg-white/80 border-slate-200' : 'bg-slate-800/60 border-slate-700/60'
+                      }`}>
+                        <div className="text-[10px] font-mono uppercase text-slate-400 font-bold mb-1">
+                          Outbound Flows ({outboundFlows.length})
+                        </div>
+                        {outboundFlows.length > 0 ? (
+                          <div className="space-y-1 mt-1 max-h-16 overflow-y-auto">
+                            {outboundFlows.map((e) => {
+                              const dst = hosts.find((h) => h.id === e.target);
+                              return (
+                                <div key={e.id} className="text-[11px] font-mono text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                                  <span>➔ {dst?.name || e.target}</span>
+                                  <span className="text-cyan-600 dark:text-cyan-400">{e.protocol}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">No outgoing links</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Controls for This Specific Node */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                      <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                        Active Node Selected: <strong className="text-cyan-500">{selectedHost.name}</strong> ({selectedHost.ip})
+                      </div>
+
+                      <div className="flex items-center space-x-2.5">
+                        <button
+                          onClick={() => {
+                            if (soundEnabled) playCyberTone('click');
+                            onNavigateToWhatIf();
+                          }}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-bold font-sans transition-all flex items-center space-x-1.5 ${
+                            isLight
+                              ? 'border border-cyan-300 bg-cyan-50 text-cyan-800 hover:bg-cyan-100'
+                              : 'border border-cyan-500/40 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/60'
+                          }`}
+                        >
+                          <GitFork className="w-3.5 h-3.5 text-cyan-500" />
+                          <span>Simulate Defense on {selectedHost.name}</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            if (soundEnabled) playCyberTone('click');
+                            onToggleIsolate(selectedHost.id);
+                          }}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold font-sans transition-all flex items-center space-x-2 ${
+                            isIso
+                              ? isLight
+                                ? 'border border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                : 'border border-emerald-500/40 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50'
+                              : 'border border-rose-500 bg-rose-600 hover:bg-rose-700 text-white shadow-md'
+                          }`}
+                        >
+                          {isIso ? (
+                            <>
+                              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                              <span>Plug Back In</span>
+                            </>
+                          ) : (
+                            <>
+                              <ShieldOff className="w-4 h-4 text-white" />
+                              <span>Quarantine {selectedHost.name}</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 

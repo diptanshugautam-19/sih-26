@@ -1215,23 +1215,39 @@ async function startServer() {
   // API Route: Action - Run Counterfactual Simulation
   app.post('/api/actions/simulate', (req, res) => {
     const { actionType, targetId, port } = req.body;
+    const targetHost = currentHosts.find((h) => h.id === targetId);
+    const predicted = computeNextPredictedTarget();
+    const currentRisk = predicted ? predicted.probabilityPercent : 85;
+
     let newRisk = 18;
 
     if (actionType === 'isolate_host') {
-      if (targetId === 'app-07' || targetId === 'node-dmz') newRisk = 12;
-      else if (targetId === 'srv-dc01' || targetId === 'node-target') newRisk = 24;
-      else if (targetId === 'c2-ext' || targetId === 'node-src') newRisk = 10;
-      else newRisk = 30;
+      if (!targetHost) {
+        newRisk = Math.max(10, Math.round(currentRisk * 0.3));
+      } else if (targetHost.status === 'compromised' || targetHost.segment === 'dmz') {
+        // Isolating the breached / attacker entry point severs ingress sessions at the root
+        newRisk = 8;
+      } else if (targetHost.id === predicted.hostId || targetHost.status === 'targeted') {
+        // Isolating the target prevents lateral penetration
+        newRisk = 16;
+      } else {
+        // Isolating a secondary host reduces lateral blast radius proportionally
+        newRisk = Math.max(15, Math.round(currentRisk * 0.65));
+      }
     } else if (actionType === 'block_port') {
-      if (port === 445) newRisk = 22;
-      else if (port === 3389) newRisk = 35;
-      else newRisk = 40;
+      const isCriticalPort = port && (
+        port === predicted?.incomingPort ||
+        [21, 22, 80, 443, 445, 3389, 88, 135].includes(Number(port))
+      );
+      if (isCriticalPort) {
+        newRisk = 19;
+      } else {
+        newRisk = Math.max(25, Math.round(currentRisk * 0.75));
+      }
     }
 
-    const currentRisk = computeNextPredictedTarget().probabilityPercent;
-    const deltaPts = Math.round(currentRisk - newRisk);
+    const deltaPts = Math.max(5, Math.round(currentRisk - newRisk));
 
-    const targetHost = currentHosts.find((h) => h.id === targetId);
     const targetLabel = targetHost ? `${targetHost.name} (${targetHost.ip})` : targetId;
     const actionLabel = actionType === 'isolate_host'
       ? `Isolate ${targetHost ? targetHost.name : targetId}`
@@ -1243,7 +1259,7 @@ async function startServer() {
       actionLabel,
       targetId,
       targetLabel,
-      port,
+      port: port ? Number(port) : undefined,
       timeAgo: 'Just now',
       initialRisk: Math.round(currentRisk),
       simulatedRisk: newRisk,

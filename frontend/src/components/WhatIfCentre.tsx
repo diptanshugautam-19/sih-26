@@ -193,92 +193,135 @@ export const WhatIfCentre: React.FC<WhatIfCentreProps> = ({
             </div>
           </div>
 
-          {/* Target Host Dropdown */}
-          <div className="space-y-1.5 relative">
-            <label className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
-              Target Node
-            </label>
-            <button
-              onClick={() => setShowHostDropdown(!showHostDropdown)}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-xs font-mono transition-colors ${
-                isLight
-                  ? 'border-slate-300 bg-slate-50 text-slate-900 hover:border-cyan-500'
-                  : 'border-slate-800 bg-slate-900/80 text-slate-100 hover:border-cyan-500/50'
-              }`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <Server className="w-4 h-4 text-cyan-500" />
-                <span className="font-bold text-sm">{selectedHost.name}</span>
-                <span className="text-slate-400">({selectedHost.role})</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <span className="text-xs text-slate-400 font-bold">{selectedHost.ip}</span>
-                <ChevronDown className="w-4 h-4 text-slate-400" />
-              </div>
-            </button>
+          {/* Target Host Selector: Visible Interactive Node Cards */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
+                Target Node ({hosts.length} Available in Active Network)
+              </label>
+              <span className="text-[11px] text-cyan-500 font-mono font-semibold">
+                Click any node to switch
+              </span>
+            </div>
 
-            {showHostDropdown && (
-              <div
-                className={`absolute top-full left-0 right-0 mt-1.5 rounded-xl border shadow-2xl z-30 overflow-hidden divide-y ${
-                  isLight
-                    ? 'bg-white border-slate-300 divide-slate-100 text-slate-800'
-                    : 'bg-slate-900 border-slate-700 divide-slate-800 text-slate-100'
-                }`}
-              >
-                {hosts.map((h) => (
-                  <div
+            {/* Grid of host cards so the user can easily click and switch between nodes */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {hosts.map((h) => {
+                const isSelected = selectedTargetHostId === h.id;
+                const isComp = h.status === 'compromised';
+                const isTgt = h.status === 'targeted';
+                return (
+                  <button
                     key={h.id}
+                    type="button"
                     onClick={() => {
                       if (soundEnabled) playCyberTone('click');
                       onSelectTargetHost(h.id);
-                      setShowHostDropdown(false);
+                      if (h.openPorts && h.openPorts.length > 0) {
+                        onSelectPort(h.openPorts[0]);
+                      }
                     }}
-                    className={`flex items-center justify-between px-4 py-2.5 cursor-pointer text-xs font-mono transition-colors ${
-                      isLight ? 'hover:bg-slate-100' : 'hover:bg-slate-800'
-                    } ${selectedTargetHostId === h.id ? (isLight ? 'bg-cyan-50 font-bold' : 'bg-cyan-950/40 font-bold') : ''}`}
+                    className={`p-3 rounded-xl border text-left transition-all relative ${
+                      isSelected
+                        ? isLight
+                          ? 'border-cyan-500 bg-cyan-50/90 shadow-md ring-2 ring-cyan-400/30'
+                          : 'border-cyan-400 bg-cyan-950/60 shadow-[0_0_15px_rgba(6,182,212,0.3)] ring-2 ring-cyan-400/40'
+                        : isLight
+                        ? 'border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300'
+                        : 'border-slate-800 bg-slate-900/60 hover:bg-slate-800 hover:border-slate-700'
+                    }`}
                   >
-                    <div className="flex items-center space-x-2">
-                      <span className="font-bold">{h.name}</span>
-                      <span className="text-slate-400 text-[11px]">{h.role}</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Server className={`w-3.5 h-3.5 ${isSelected ? 'text-cyan-500' : 'text-slate-400'}`} />
+                        <span className="font-bold font-mono text-xs">{h.name}</span>
+                      </div>
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase ${
+                        isComp
+                          ? 'bg-rose-500/20 text-rose-500'
+                          : isTgt
+                          ? 'bg-amber-500/20 text-amber-500'
+                          : 'bg-emerald-500/20 text-emerald-500'
+                      }`}>
+                        {isComp ? 'Breached' : isTgt ? 'Targeted' : 'Healthy'}
+                      </span>
                     </div>
-                    <span className="text-cyan-500">{h.ip}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">
+                      {h.role}
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 mt-1.5">
+                      <span>{h.ip}</span>
+                      <span className="text-cyan-600 dark:text-cyan-400 font-semibold">
+                        {h.openPorts?.length ? `P: ${h.openPorts.slice(0, 3).join(', ')}` : 'No Ports'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Port Selector (if block_port is chosen) */}
           {actionType === 'block_port' && (
-            <div className="space-y-1.5">
-              <label className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
-                Target Port / Attack Vector
-              </label>
-              <div className="grid grid-cols-3 gap-2.5">
-                {[
-                  { port: 445, label: 'Port 445 (SMB / PsExec)' },
-                  { port: 3389, label: 'Port 3389 (RDP)' },
-                  { port: 8080, label: 'Port 8080 (API Gateway)' }
-                ].map((p) => (
-                  <button
-                    key={p.port}
-                    onClick={() => {
-                      if (soundEnabled) playCyberTone('click');
-                      onSelectPort(p.port);
-                    }}
-                    className={`py-2 px-3 rounded-xl border text-xs font-mono transition-all ${
-                      selectedPort === p.port
-                        ? isLight
-                          ? 'border-amber-400 bg-amber-50 text-amber-900 font-bold'
-                          : 'border-amber-400 bg-amber-950/50 text-amber-300 font-bold'
-                        : isLight
-                        ? 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
-                        : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
+                  Target Port / Attack Vector on {selectedHost.name}
+                </label>
+                <span className="text-[11px] text-amber-500 font-mono">
+                  {selectedHost.openPorts?.length ? `${selectedHost.openPorts.length} open services detected` : 'Standard ports'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {(() => {
+                  const portProtocols: { [p: number]: string } = {
+                    21: 'FTP',
+                    22: 'SSH',
+                    23: 'Telnet',
+                    25: 'SMTP',
+                    53: 'DNS',
+                    80: 'HTTP',
+                    88: 'Kerberos',
+                    135: 'RPC',
+                    443: 'HTTPS',
+                    445: 'SMB / PsExec',
+                    3389: 'RDP Sync',
+                    5000: 'TCP/5000',
+                    5432: 'PostgreSQL',
+                    8080: 'Web Proxy'
+                  };
+                  const hostPorts = selectedHost?.openPorts?.length ? selectedHost.openPorts : [445, 3389, 80, 443, 22, 21];
+                  const allPorts = Array.from(new Set([...hostPorts, 445, 3389, 80, 443]));
+
+                  return allPorts.map((p) => {
+                    const label = `Port ${p} (${portProtocols[p] || 'TCP Service'})`;
+                    const isSelected = selectedPort === p;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => {
+                          if (soundEnabled) playCyberTone('click');
+                          onSelectPort(p);
+                        }}
+                        className={`py-2.5 px-3 rounded-xl border text-xs font-mono transition-all text-left flex items-center justify-between ${
+                          isSelected
+                            ? isLight
+                              ? 'border-amber-400 bg-amber-50 text-amber-900 font-bold shadow-sm ring-1 ring-amber-400'
+                              : 'border-amber-400 bg-amber-950/60 text-amber-300 font-bold shadow-[0_0_10px_rgba(251,191,36,0.25)] ring-1 ring-amber-400'
+                            : isLight
+                            ? 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 hover:border-slate-300'
+                            : 'border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        <span>{label}</span>
+                        {selectedHost?.openPorts?.includes(p) && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" title="Open on selected host" />
+                        )}
+                      </button>
+                    );
+                  });
+                })()}
               </div>
             </div>
           )}

@@ -87,70 +87,38 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
   };
 
   const getFriendlyHostInfo = (host: NetworkHost) => {
-    switch (host.id) {
-      case 'srv-dc01':
-        return {
-          title: 'Central Main Server',
-          roleDesc: 'Controls company logins, files, and administrative accounts',
-          status: '⚠️ IN IMMEDIATE DANGER',
-          statusColor: '#fbbf24',
-          bgStatus: isLight ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
-        };
-      case 'app-07':
-        return {
-          title: 'Public Web Gateway',
-          roleDesc: 'External website server that the hacker initially broke into',
-          status: '🔴 INFECTED (BREACHED)',
-          statusColor: '#f43f5e',
-          bgStatus: isLight ? 'bg-rose-100 text-rose-900 border-rose-300' : 'bg-rose-950/80 text-rose-300 border-rose-500/40'
-        };
-      case 'ws-042':
-        return {
-          title: 'Staff Laptop (Finance)',
-          roleDesc: 'Employee computer infected through phishing attachment',
-          status: '🔴 INFECTED (BREACHED)',
-          statusColor: '#f43f5e',
-          bgStatus: isLight ? 'bg-rose-100 text-rose-900 border-rose-300' : 'bg-rose-950/80 text-rose-300 border-rose-500/40'
-        };
-      case 'db-02':
-        return {
-          title: 'Customer Database',
-          roleDesc: 'Stores confidential records; currently protected and isolated',
-          status: '🟢 SAFE & HEALTHY',
-          statusColor: '#10b981',
-          bgStatus: isLight ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
-        };
-      case 'c2-ext':
-        return {
-          title: 'External Hacker Server',
-          roleDesc: 'Malicious machine originating the cyber attack from the internet',
-          status: '💀 ATTACK SOURCE',
-          statusColor: '#f43f5e',
-          bgStatus: isLight ? 'bg-rose-100 text-rose-900 border-rose-300' : 'bg-rose-950/80 text-rose-300 border-rose-500/40'
-        };
-      default: {
-        const isComp = host.status === 'compromised';
-        const isTgt = host.status === 'targeted';
-        const isC2Node = host.role?.toLowerCase().includes('adversary') || host.role?.toLowerCase().includes('attacker') || host.id.includes('c2') || host.id.includes('expl');
-        return {
-          title: host.name,
-          roleDesc: `${host.role} (${host.segment.toUpperCase()}) · OS: ${host.os}`,
-          status: isC2Node
-            ? '💀 ATTACK SOURCE'
-            : isComp
-            ? '🔴 INFECTED (BREACHED)'
-            : isTgt
-            ? '⚠️ IN IMMEDIATE DANGER'
-            : '🟢 SAFE & HEALTHY',
-          statusColor: isC2Node || isComp ? '#f43f5e' : isTgt ? '#fbbf24' : '#10b981',
-          bgStatus: isC2Node || isComp
-            ? (isLight ? 'bg-rose-100 text-rose-900 border-rose-300' : 'bg-rose-950/80 text-rose-300 border-rose-500/40')
-            : isTgt
-            ? (isLight ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-amber-950/80 text-amber-300 border-amber-500/40')
-            : (isLight ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40')
-        };
-      }
-    }
+    const isComp = host.status === 'compromised';
+    const isTgt = host.status === 'targeted';
+    const isElevated = host.status === 'elevated';
+    const isC2Node =
+      host.role?.toLowerCase().includes('external') ||
+      host.role?.toLowerCase().includes('adversary') ||
+      host.role?.toLowerCase().includes('attacker') ||
+      host.segment === 'dmz' ||
+      host.id.includes('c2') ||
+      host.id.includes('ext');
+
+    const riskPercent = Math.round((host.attentionScore || (isTgt ? 0.85 : isComp ? 0.9 : 0.3)) * 100);
+
+    return {
+      title: `${host.name} (${host.role})`,
+      roleDesc: `${host.role} · OS: ${host.os} · Open Ports: [${host.openPorts.join(', ')}] · Attention: ${riskPercent}%`,
+      status: isC2Node || isComp
+        ? '🔴 INFECTED / BREACHED'
+        : isTgt
+        ? `⚠️ IN IMMEDIATE DANGER (${riskPercent}%)`
+        : isElevated
+        ? `⚡ ELEVATED ACTIVITY (${riskPercent}%)`
+        : '🟢 SAFE & HEALTHY',
+      statusColor: isC2Node || isComp ? '#f43f5e' : isTgt ? '#fbbf24' : isElevated ? '#06b6d4' : '#10b981',
+      bgStatus: isC2Node || isComp
+        ? (isLight ? 'bg-rose-100 text-rose-900 border-rose-300' : 'bg-rose-950/80 text-rose-300 border-rose-500/40')
+        : isTgt
+        ? (isLight ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-amber-950/80 text-amber-300 border-amber-500/40')
+        : isElevated
+        ? (isLight ? 'bg-cyan-100 text-cyan-900 border-cyan-300' : 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40')
+        : (isLight ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40')
+    };
   };
 
   const nodeBoxFill = (isIso: boolean, isC2: boolean, isComp: boolean, isTgt: boolean) => {
