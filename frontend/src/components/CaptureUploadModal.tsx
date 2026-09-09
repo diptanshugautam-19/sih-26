@@ -13,6 +13,7 @@ import {
   fetchPresetCaptures,
   apiLoadPresetCapture,
   apiUploadCapture,
+  apiUploadCaptureBinary,
   apiResetCapture
 } from '../utils/api';
 import { playCyberTone } from '../utils/audio';
@@ -59,42 +60,23 @@ export const CaptureUploadModal: React.FC<CaptureUploadModalProps> = ({
   const handleProcessFile = async (file: File) => {
     setErrorMsg(null);
     setIsProcessing(true);
-    setProcessingStage(`Reading ${file.name} (${(file.size / 1024).toFixed(1)} KB)...`);
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    const sizeKb = (file.size / 1024).toFixed(1);
+    const displaySize = file.size > 1024 * 1024 ? `${sizeMb} MB` : `${sizeKb} KB`;
 
     try {
       if (soundEnabled) playCyberTone('click');
 
-      const fileName = file.name;
-      const extension = fileName.split('.').pop()?.toLowerCase() || 'other';
+      setProcessingStage(`Streaming ${file.name} (${displaySize}) directly to VASHIKARAN engine...`);
+      await apiUploadCaptureBinary(file);
 
-      let fileContent = '';
-      let isBase64 = false;
+      setProcessingStage('Executing GNN (GATConv) + Temporal Transformer Forward Pass...');
+      // Brief pause to allow stage text to be visually visible
+      await new Promise((r) => setTimeout(r, 400));
 
-      if (['csv', 'json', 'log', 'txt'].includes(extension)) {
-        setProcessingStage(`Reading telemetry text from ${file.name}...`);
-        fileContent = await file.text();
-        isBase64 = false;
-      } else {
-        setProcessingStage(`Reading binary PCAP packet streams from ${file.name}...`);
-        const b64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const res = (reader.result as string) || '';
-            const data = res.includes(',') ? res.split(',')[1] : res;
-            resolve(data);
-          };
-          reader.onerror = () => reject(new Error('Failed to read capture file stream.'));
-          reader.readAsDataURL(file);
-        });
-        fileContent = b64;
-        isBase64 = true;
-      }
-
-      setProcessingStage('Executing GNN + Temporal World Model Neural Forward Pass...');
-      await apiUploadCapture(fileName, extension, fileContent, file.size, isBase64);
-
-      setProcessingStage('Updating dashboard and threat topology views...');
+      setProcessingStage('Updating dynamic network topology and host states...');
       await onCaptureLoaded();
+      if (soundEnabled) playCyberTone('success');
       onClose();
     } catch (err: any) {
       console.error('Capture upload error:', err);

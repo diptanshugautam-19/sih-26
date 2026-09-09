@@ -144,6 +144,23 @@ export async function apiLoadPresetCapture(presetId: string) {
   return res.json();
 }
 
+export async function apiUploadCaptureBinary(file: File) {
+  const res = await fetch('/api/upload-capture-binary', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'x-file-name': encodeURIComponent(file.name),
+      'x-file-size': file.size.toString()
+    },
+    body: file
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to upload capture: ${res.statusText}`);
+  }
+  return res.json();
+}
+
 export async function apiUploadCapture(
   fileName: string,
   fileType: string,

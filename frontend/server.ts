@@ -474,8 +474,8 @@ const PRESET_CAPTURES = [
 
 async function startServer() {
   const app = express();
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+  app.use(express.json({ limit: '1000mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '1000mb' }));
 
   // API Route: Health check
   app.get('/api/health', (req, res) => {
@@ -874,42 +874,20 @@ async function startServer() {
     });
   });
 
-  // API Route: Custom File Upload (PCAP, PCAPNG, CSV, JSON, LOG)
-  app.post('/api/upload-capture', (req, res) => {
+  function processUploadedCapture(
+    savedFilePath: string,
+    fileName: string,
+    fileType: string,
+    fileSize: number,
+    res: express.Response,
+    projectRoot: string
+  ) {
     try {
-      const { fileName, fileType, fileContent, fileSize, isBase64 } = req.body;
-
-      if (!fileName) {
-        return res.status(400).json({ error: 'fileName is required' });
-      }
-
-      console.log(`[INGESTION] Received upload: ${fileName} (${fileType}, ${(fileSize / 1024).toFixed(1)} KB, isBase64: ${!!isBase64})`);
-
-      // 1. Ensure upload directory exists
-      const projectRoot = fs.existsSync(path.join(process.cwd(), 'scripts', 'infer_pcap.py'))
-        ? process.cwd()
-        : path.resolve(process.cwd(), '..');
-      const uploadsDir = path.join(projectRoot, 'data', 'uploads');
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-      }
-
-      const cleanName = (fileName || 'capture.pcap').replace(/[^a-zA-Z0-9._-]/g, '_');
-      const savedFilePath = path.join(uploadsDir, `${Date.now()}_${cleanName}`);
-
-      // 2. Save file to disk
-      if (isBase64 && typeof fileContent === 'string') {
-        const fileBuffer = Buffer.from(fileContent, 'base64');
-        fs.writeFileSync(savedFilePath, fileBuffer);
-      } else if (typeof fileContent === 'string') {
-        fs.writeFileSync(savedFilePath, fileContent, 'utf-8');
-      }
-
       let parsedFromModel = false;
       const lowerExt = (fileType || fileName.split('.').pop() || '').toLowerCase();
 
-      // 3. If binary PCAP / PCAPNG, execute Neural World Model Inference via Python
-      if (['pcap', 'pcapng', 'cap'].includes(lowerExt) || isBase64) {
+      // 1. If binary PCAP / PCAPNG or large file, execute Neural World Model Inference via Python
+      if (['pcap', 'pcapng', 'cap', 'bin'].includes(lowerExt) || lowerExt === '' || fs.statSync(savedFilePath).size > 1000) {
         try {
           const pyScript = path.join(projectRoot, 'scripts', 'infer_pcap.py');
           console.log(`[MODEL] Spawning Python World Model PCAP Pipeline: ${pyScript} on ${savedFilePath}`);
@@ -917,8 +895,8 @@ async function startServer() {
           const stdout = execFileSync('python', [pyScript, savedFilePath, '50000', '--json'], {
             cwd: projectRoot,
             encoding: 'utf-8',
-            maxBuffer: 50 * 1024 * 1024,
-            timeout: 60000
+            maxBuffer: 100 * 1024 * 1024,
+            timeout: 120000
           });
 
           const startMarker = '__INFERENCE_JSON_START__';
@@ -951,9 +929,20 @@ async function startServer() {
         }
       }
 
-      // 4. Fallback: If not PCAP or Python execution had missing binary header, parse CSV/text dynamically
+      // 2. Fallback: If not PCAP or Python execution had missing binary header, parse CSV/text dynamically
       if (!parsedFromModel) {
-        const contentStr = typeof fileContent === 'string' ? fileContent : '';
+        let contentStr = '';
+        try {
+          // Safely read up to 1MB sample of file from disk
+          const fd = fs.openSync(savedFilePath, 'r');
+          const buffer = Buffer.alloc(1024 * 1024);
+          const bytesRead = fs.readSync(fd, buffer, 0, 1024 * 1024, 0);
+          fs.closeSync(fd);
+          contentStr = buffer.toString('utf-8', 0, bytesRead);
+        } catch (e) {
+          contentStr = '';
+        }
+
         const ipRegex = /(\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b)/g;
         const matches = contentStr.match(ipRegex) || [];
         const uniqueIps = Array.from(new Set(matches)).slice(0, 10);
@@ -969,7 +958,8 @@ async function startServer() {
         if (lowerContent.includes('ssh') || lowerContent.includes('22')) detectedProtocols.push('SSH');
         if (detectedProtocols.length === 0) detectedProtocols.push('TCP/IP', 'ARP', 'ICMP');
 
-        const estimatedPackets = Math.max(150, Math.round((fileSize || 102400) / 95));
+        const realFileSize = fs.existsSync(savedFilePath) ? fs.statSync(savedFilePath).size : (fileSize || 102400);
+        const estimatedPackets = Math.max(150, Math.round(realFileSize / 95));
         const estimatedFlows = Math.max(12, Math.round(estimatedPackets / 14));
         const durationSeconds = Math.max(30, Math.round(estimatedPackets / 35));
 
@@ -1100,7 +1090,7 @@ async function startServer() {
           id: `cap-${Date.now()}`,
           fileName,
           fileType: (lowerExt || 'pcap') as any,
-          fileSize: fileSize || 1048576,
+          fileSize: realFileSize,
           packetCount: estimatedPackets,
           flowCount: estimatedFlows,
           durationSeconds,
@@ -1124,6 +1114,81 @@ async function startServer() {
           predictedNextTarget: computeNextPredictedTarget()
         }
       });
+    } catch (err: any) {
+      console.error('Failed to parse uploaded network capture:', err);
+      res.status(500).json({ error: err.message || 'Failed to parse network capture' });
+    }
+  }
+
+  // API Route: Direct Binary Stream Upload (handles 133MB+ PCAP/PCAPNG/etc. with zero memory overhead)
+  app.post('/api/upload-capture-binary', (req, res) => {
+    try {
+      const projectRoot = fs.existsSync(path.join(process.cwd(), 'scripts', 'infer_pcap.py'))
+        ? process.cwd()
+        : path.resolve(process.cwd(), '..');
+      const uploadsDir = path.join(projectRoot, 'data', 'uploads');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      const rawFileName = req.headers['x-file-name'] ? decodeURIComponent(req.headers['x-file-name'] as string) : 'capture.pcap';
+      const fileSize = Number(req.headers['x-file-size'] || 0);
+      const cleanName = rawFileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const savedFilePath = path.join(uploadsDir, `${Date.now()}_${cleanName}`);
+
+      console.log(`[INGESTION-STREAM] Receiving stream: ${rawFileName} (${(fileSize / (1024 * 1024)).toFixed(1)} MB) -> ${savedFilePath}`);
+
+      const writeStream = fs.createWriteStream(savedFilePath);
+      req.pipe(writeStream);
+
+      writeStream.on('error', (err) => {
+        console.error('[INGESTION-STREAM] Error writing stream to disk:', err);
+        res.status(500).json({ error: 'Failed to stream capture file to disk' });
+      });
+
+      writeStream.on('finish', () => {
+        const actualBytes = fs.existsSync(savedFilePath) ? fs.statSync(savedFilePath).size : fileSize;
+        console.log(`[INGESTION-STREAM] Stream finished (${actualBytes} bytes written). Running inference...`);
+        const ext = rawFileName.split('.').pop()?.toLowerCase() || 'pcap';
+        processUploadedCapture(savedFilePath, rawFileName, ext, actualBytes, res, projectRoot);
+      });
+    } catch (err: any) {
+      console.error('[INGESTION-STREAM] Server error:', err);
+      res.status(500).json({ error: err.message || 'Streaming upload failed' });
+    }
+  });
+
+  // API Route: Custom File Upload (Backward-compatible JSON endpoint)
+  app.post('/api/upload-capture', (req, res) => {
+    try {
+      const { fileName, fileType, fileContent, fileSize, isBase64 } = req.body;
+
+      if (!fileName) {
+        return res.status(400).json({ error: 'fileName is required' });
+      }
+
+      console.log(`[INGESTION] Received JSON upload: ${fileName} (${fileType}, ${(fileSize / 1024).toFixed(1)} KB, isBase64: ${!!isBase64})`);
+
+      const projectRoot = fs.existsSync(path.join(process.cwd(), 'scripts', 'infer_pcap.py'))
+        ? process.cwd()
+        : path.resolve(process.cwd(), '..');
+      const uploadsDir = path.join(projectRoot, 'data', 'uploads');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      const cleanName = (fileName || 'capture.pcap').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const savedFilePath = path.join(uploadsDir, `${Date.now()}_${cleanName}`);
+
+      if (isBase64 && typeof fileContent === 'string') {
+        const fileBuffer = Buffer.from(fileContent, 'base64');
+        fs.writeFileSync(savedFilePath, fileBuffer);
+      } else if (typeof fileContent === 'string') {
+        fs.writeFileSync(savedFilePath, fileContent, 'utf-8');
+      }
+
+      const actualBytes = fs.existsSync(savedFilePath) ? fs.statSync(savedFilePath).size : fileSize;
+      processUploadedCapture(savedFilePath, fileName, fileType, actualBytes, res, projectRoot);
     } catch (err: any) {
       console.error('Failed to parse uploaded network capture:', err);
       res.status(500).json({ error: err.message || 'Failed to parse network capture' });
