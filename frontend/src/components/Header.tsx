@@ -159,13 +159,6 @@ export const Header: React.FC<HeaderProps> = ({
               }`}>
                 VASHIKARAN
               </h1>
-              <span className={`px-2.5 py-0.5 rounded text-[10px] sm:text-[11px] font-mono uppercase font-bold tracking-wider ${
-                isLight 
-                  ? 'bg-blue-50 text-[#102754] border border-blue-200/80 font-bold' 
-                  : 'bg-blue-950/70 text-blue-300 border border-blue-500/40'
-              }`}>
-                SOC WORLD MODEL
-              </span>
             </div>
             <p className={`text-[11px] sm:text-xs font-mono tracking-wide mt-1.5 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
               AUTONOMOUS NETWORK FORENSICS & ATTACK PREDICTION
