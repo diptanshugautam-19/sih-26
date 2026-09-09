@@ -424,3 +424,25 @@ export async function apiResetCapture() {
   }
   return res.json();
 }
+
+export async function apiResetPipeline() {
+  try {
+    const res = await fetch('/api/pipeline/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch {
+    // Fallback attempt to /api/captures/reset
+  }
+  const resFallback = await fetch('/api/captures/reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!resFallback.ok) {
+    throw new Error(`Failed to reset pipeline: ${resFallback.statusText}`);
+  }
+  return resFallback.json();
+}

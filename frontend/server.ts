@@ -1553,7 +1553,7 @@ async function startServer() {
   });
 
   // API Route: Reset Capture back to live stream
-  app.post('/api/captures/reset', (req, res) => {
+  const handleFullPipelineReset = (req: express.Request, res: express.Response) => {
     currentHosts = JSON.parse(JSON.stringify(INITIAL_HOSTS));
     currentEdges = JSON.parse(JSON.stringify(INITIAL_EDGES));
     isolatedHostIds = [];
@@ -1565,11 +1565,18 @@ async function startServer() {
     customAlerts = null;
     windowSeq = 842;
 
+    console.log('[PIPELINE] Global Pipeline Reset executed. Cleared active models, stream buffers & restored ground-truth topology.');
+
     res.json({
       success: true,
-      message: 'Reset to live real-time network stream'
+      message: 'Global pipeline, inference state, and network graph successfully reset to pristine baseline',
+      timestamp: new Date().toISOString()
     });
-  });
+  };
+
+  app.post('/api/captures/reset', handleFullPipelineReset);
+  app.post('/api/pipeline/reset', handleFullPipelineReset);
+  app.post('/api/reset-pipeline', handleFullPipelineReset);
 
   // API Route: Sensor Telemetry
   app.get('/api/telemetry', (req, res) => {

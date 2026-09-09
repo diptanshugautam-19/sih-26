@@ -18,7 +18,8 @@ import {
   Clock,
   Sparkles,
   LogOut,
-  UserCheck
+  UserCheck,
+  RotateCcw
 } from 'lucide-react';
 import { TelemetryAlert, NavigationTab, CaptureMetadata, AppTheme, AuthUser } from '../types';
 import { playCyberTone } from '../utils/audio';
@@ -43,6 +44,7 @@ interface HeaderProps {
   onSelectTheme?: (theme: AppTheme) => void;
   currentUser?: AuthUser | null;
   onLogout?: () => void;
+  onResetPipeline?: () => Promise<void> | void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -63,10 +65,31 @@ export const Header: React.FC<HeaderProps> = ({
   theme = 'light',
   onSelectTheme,
   currentUser = null,
-  onLogout
+  onLogout,
+  onResetPipeline
 }) => {
   const [istTime, setIstTime] = useState('');
   const [showAlertsDropdown, setShowAlertsDropdown] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+
+  const handleReset = async () => {
+    if (isResetting) return;
+    setIsResetting(true);
+    if (soundEnabled) playCyberTone('click');
+    try {
+      if (onResetPipeline) {
+        await onResetPipeline();
+      }
+      setResetSuccess(true);
+      if (soundEnabled) playCyberTone('success');
+      setTimeout(() => setResetSuccess(false), 2800);
+    } catch (err) {
+      console.error('Pipeline reset error:', err);
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   useEffect(() => {
     const updateTime = () => {
@@ -224,6 +247,31 @@ export const Header: React.FC<HeaderProps> = ({
               {backendConnected ? 'Backend Live' : 'Connecting...'}
             </span>
           </div>
+
+          {/* Reset Pipeline Button (Restores pristine stream, clears stuck inference/buffers) */}
+          <button
+            onClick={handleReset}
+            disabled={isResetting}
+            title="Reset telemetry ingestion pipeline, AI forward inference queue, and network graph if stuck"
+            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-mono font-medium transition-all cursor-pointer ${
+              resetSuccess
+                ? isLight
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-sm'
+                  : 'bg-emerald-950/50 text-emerald-300 border-emerald-500/40'
+                : isLight
+                ? 'bg-white hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 text-slate-700 border-slate-300 shadow-sm'
+                : 'bg-slate-900/60 hover:bg-rose-950/40 hover:text-rose-300 hover:border-rose-700 text-slate-300 border-slate-800'
+            }`}
+          >
+            <RotateCcw
+              className={`w-3.5 h-3.5 ${
+                isResetting ? 'animate-spin text-amber-500' : resetSuccess ? 'text-emerald-500' : 'text-slate-400'
+              }`}
+            />
+            <span className="text-[11px]">
+              {isResetting ? 'Resetting...' : resetSuccess ? 'Pipeline Reset ✓' : 'Reset Pipeline'}
+            </span>
+          </button>
 
           {/* Date & Indian Standard Time (IST) Clock */}
           <div className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-mono ${

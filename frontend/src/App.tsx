@@ -44,7 +44,8 @@ import {
   apiIsolateHost,
   apiBlockPort,
   apiSimulateAction,
-  apiDeployPolicy
+  apiDeployPolicy,
+  apiResetPipeline
 } from './utils/api';
 
 export default function App() {
@@ -429,6 +430,16 @@ export default function App() {
     setShowCounterfactualInForecast(true);
   };
 
+  // Handler for global pipeline reset (restores baseline stream & clears stuck buffers)
+  const handleResetPipeline = async () => {
+    try {
+      await apiResetPipeline();
+      await loadBackendData(true);
+    } catch (err) {
+      console.error('Failed to reset pipeline:', err);
+    }
+  };
+
   const isLight = theme === 'light';
   const isMidnight = theme === 'midnight';
 
@@ -468,6 +479,7 @@ export default function App() {
         onSelectTheme={handleSelectTheme}
         currentUser={authUser}
         onLogout={handleLogout}
+        onResetPipeline={handleResetPipeline}
       />
 
       {/* Main Page Area */}
