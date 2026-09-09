@@ -7,6 +7,8 @@ import { ExplainabilitySection } from './components/ExplainabilitySection';
 import { MainThreatTopologyView } from './components/MainThreatTopologyView';
 import { CaptureUploadModal } from './components/CaptureUploadModal';
 import { CaptureUtilityBar } from './components/CaptureUtilityBar';
+import { ModelBenchmarksView } from './components/ModelBenchmarksView';
+import { LoginPage } from './components/LoginPage';
 import {
   INITIAL_HOSTS,
   INITIAL_EDGES,
@@ -28,7 +30,8 @@ import {
   AppTheme,
   ForecastPoint,
   KillChainStage,
-  SourceExplainabilityProfile
+  SourceExplainabilityProfile,
+  AuthUser
 } from './types';
 import { playCyberTone } from './utils/audio';
 import {
@@ -45,6 +48,28 @@ import {
 } from './utils/api';
 
 export default function App() {
+  // Authentication: Operator Login session (persisted in localStorage)
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => {
+    try {
+      const stored = localStorage.getItem('vashikaran_user');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('vashikaran_user');
+    } catch {
+      // ignore
+    }
+    setAuthUser(null);
+  };
+
   // Navigation: separates clustered single-page layout into multi-page workflow
   const [activeTab, setActiveTab] = useState<NavigationTab>('main_topology');
 
@@ -405,6 +430,19 @@ export default function App() {
   };
 
   const isLight = theme === 'light';
+  const isMidnight = theme === 'midnight';
+
+  // If operator is not authenticated, display the SOC Login Portal
+  if (!authUser) {
+    return (
+      <LoginPage
+        onLoginSuccess={(user) => setAuthUser(user)}
+        theme={theme}
+        onSelectTheme={handleSelectTheme}
+        soundEnabled={soundEnabled}
+      />
+    );
+  }
 
   return (
     <div className={`min-h-screen transition-colors duration-200 ${
@@ -428,6 +466,8 @@ export default function App() {
         onOpenUploadModal={() => setIsUploadModalOpen(true)}
         theme={theme}
         onSelectTheme={handleSelectTheme}
+        currentUser={authUser}
+        onLogout={handleLogout}
       />
 
       {/* Main Page Area */}
@@ -556,6 +596,14 @@ export default function App() {
               theme={theme}
             />
           </div>
+        )}
+
+        {/* VIEW 5: MODEL BENCHMARKS & FASTAPI INFERENCE CONTRACTS */}
+        {activeTab === 'benchmarks' && (
+          <ModelBenchmarksView
+            theme={theme}
+            soundEnabled={soundEnabled}
+          />
         )}
 
       </main>

@@ -15,9 +15,12 @@ import {
   Sun,
   Moon,
   Palette,
-  Clock
+  Clock,
+  Sparkles,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
-import { TelemetryAlert, NavigationTab, CaptureMetadata, AppTheme } from '../types';
+import { TelemetryAlert, NavigationTab, CaptureMetadata, AppTheme, AuthUser } from '../types';
 import { playCyberTone } from '../utils/audio';
 import { VashikaranChakraLogo } from './VashikaranChakraLogo';
 
@@ -38,6 +41,8 @@ interface HeaderProps {
   onOpenUploadModal?: () => void;
   theme?: AppTheme;
   onSelectTheme?: (theme: AppTheme) => void;
+  currentUser?: AuthUser | null;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -56,7 +61,9 @@ export const Header: React.FC<HeaderProps> = ({
   activeCapture = null,
   onOpenUploadModal,
   theme = 'light',
-  onSelectTheme
+  onSelectTheme,
+  currentUser = null,
+  onLogout
 }) => {
   const [istTime, setIstTime] = useState('');
   const [showAlertsDropdown, setShowAlertsDropdown] = useState(false);
@@ -112,6 +119,11 @@ export const Header: React.FC<HeaderProps> = ({
       id: 'explainability',
       label: 'Why the AI Thinks This (Explainability)',
       icon: Cpu
+    },
+    {
+      id: 'benchmarks',
+      label: 'ML Model Benchmarks & Contracts',
+      icon: Sparkles
     }
   ];
 
@@ -134,32 +146,69 @@ export const Header: React.FC<HeaderProps> = ({
         ? 'bg-[#050b16] border-[#102340] text-slate-100'
         : 'bg-[#0b0f19] border-[#182234] text-slate-100'
     }`}>
-      {/* 1. TOP BAR: STRICTLY ONLY THE APPLICATION NAME (ENLARGED & APPEALING) */}
-      <div className={`max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-4.5 flex items-center border-b ${
+      {/* 1. TOP BAR: APPLICATION NAME & AUTHENTICATED OPERATOR PROFILE */}
+      <div className={`max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-3.5 sm:py-4 flex items-center justify-between border-b ${
         isLight ? 'border-slate-100' : isMidnight ? 'border-[#0e1c33]' : 'border-[#141d2d]'
       }`}>
-        <div className="flex items-center space-x-3.5 sm:space-x-4">
-          <VashikaranChakraLogo size="md" />
+        <div className="flex items-center space-x-3.5 sm:space-x-5">
+          <VashikaranChakraLogo size="header" />
           <div>
             <div className="flex items-center space-x-2.5 sm:space-x-3">
-              <h1 className={`text-2xl sm:text-3xl font-black tracking-wider uppercase font-mono leading-none ${
-                isLight ? 'text-slate-900' : 'text-white'
+              <h1 className={`text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-[0.16em] uppercase font-sans leading-none ${
+                isLight ? 'text-[#102754]' : 'text-white'
               }`}>
                 VASHIKARAN
               </h1>
               <span className={`px-2.5 py-0.5 rounded text-[10px] sm:text-[11px] font-mono uppercase font-bold tracking-wider ${
                 isLight 
-                  ? 'bg-cyan-50 text-cyan-700 border border-cyan-200' 
-                  : 'bg-cyan-950/70 text-cyan-300 border border-cyan-500/40'
+                  ? 'bg-blue-50 text-[#102754] border border-blue-200/80 font-bold' 
+                  : 'bg-blue-950/70 text-blue-300 border border-blue-500/40'
               }`}>
                 SOC WORLD MODEL
               </span>
             </div>
-            <p className={`text-[11px] sm:text-xs font-mono tracking-wide mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+            <p className={`text-[11px] sm:text-xs font-mono tracking-wide mt-1.5 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
               AUTONOMOUS NETWORK FORENSICS & ATTACK PREDICTION
             </p>
           </div>
         </div>
+
+        {/* Authenticated Operator Profile & Logout Control */}
+        {currentUser && (
+          <div className="flex items-center space-x-3 sm:space-x-3.5">
+            <div className={`hidden sm:flex flex-col text-right font-mono`}>
+              <div className="flex items-center justify-end space-x-1.5">
+                <span className={`text-xs font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  {currentUser.name}
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                  {currentUser.callsign}
+                </span>
+              </div>
+              <div className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                {currentUser.role} &middot; <span className="text-emerald-500 font-semibold">CLEARED</span>
+              </div>
+            </div>
+
+            {onLogout && (
+              <button
+                onClick={() => {
+                  if (soundEnabled) playCyberTone('click');
+                  onLogout();
+                }}
+                title="Lock Terminal & Log Out"
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono font-medium transition-colors cursor-pointer ${
+                  isLight
+                    ? 'bg-slate-100 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 text-slate-700 border-slate-300'
+                    : 'bg-slate-900/60 hover:bg-rose-950/40 hover:text-rose-300 hover:border-rose-800 text-slate-300 border-slate-800'
+                }`}
+              >
+                <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                <span className="hidden sm:inline text-[11px]">Lock & Log Out</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 2. MIDDLE BAR: BACKEND LIVE, DATE/IST & CONTROLS (ABOVE LIVE NETWORK FEED & BELOW VASHIKARAN) */}

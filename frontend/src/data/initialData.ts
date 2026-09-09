@@ -6,24 +6,49 @@ import {
   FeatureImportance,
   KillChainStage,
   TelemetryAlert,
-  SourceExplainabilityProfile
+  SourceExplainabilityProfile,
+  PredictResponse,
+  CounterfactualResponse,
+  BenchmarkSummary,
+  RankedIntervention,
+  OODAutoencoderState,
+  ModelArchitectureTelemetry
 } from '../types';
+
+/* ========================================================================== */
+/* SECTION 2 - LAYER B: Interactive Network Graph Sample Topology             */
+/* ========================================================================== */
 
 export const INITIAL_HOSTS: NetworkHost[] = [
   {
-    id: 'ws-042',
-    name: 'WS-042',
-    ip: '10.0.0.5',
-    role: 'Workstation - Finance Dept',
-    segment: 'corporate',
-    status: 'targeted',
-    x: 12,
-    y: 28,
-    openPorts: [135, 445, 3389],
-    attentionScore: 0.78,
-    os: 'Windows 11 Enterprise (23H2)',
-    inboundEdges: 3,
+    id: 'c2-ext',
+    name: 'C2-EXT',
+    ip: '185.220.101.4',
+    role: 'External Adversary C2 Node',
+    segment: 'dmz',
+    status: 'compromised',
+    x: 8,
+    y: 72,
+    openPorts: [443, 8443],
+    attentionScore: 0.96,
+    os: 'Unknown Linux (Bulletproof ASN)',
+    inboundEdges: 0,
     outboundEdges: 2
+  },
+  {
+    id: 'app-07',
+    name: 'APP-07',
+    ip: '10.0.0.22',
+    role: 'Internal API Gateway & Auth',
+    segment: 'dmz',
+    status: 'compromised',
+    x: 32,
+    y: 68,
+    openPorts: [80, 443, 8080, 5432],
+    attentionScore: 0.88,
+    os: 'Ubuntu LTS 22.04',
+    inboundEdges: 2,
+    outboundEdges: 3
   },
   {
     id: 'srv-dc01',
@@ -31,73 +56,48 @@ export const INITIAL_HOSTS: NetworkHost[] = [
     ip: '10.0.0.15',
     role: 'Primary Domain Controller',
     segment: 'corporate',
-    status: 'compromised',
-    x: 44,
-    y: 22,
+    status: 'targeted',
+    x: 52,
+    y: 28,
     openPorts: [53, 88, 135, 389, 445, 636],
-    attentionScore: 0.92,
+    attentionScore: 0.94,
     os: 'Windows Server 2022 Core',
     inboundEdges: 4,
     outboundEdges: 3
   },
   {
-    id: 'app-07',
-    name: 'APP-07',
-    ip: '10.0.0.22',
-    role: 'Internal API Gateway & Auth',
+    id: 'ws-042',
+    name: 'WS-042',
+    ip: '10.0.0.5',
+    role: 'Workstation - Finance Dept',
     segment: 'corporate',
-    status: 'compromised',
-    x: 32,
-    y: 68,
-    openPorts: [80, 443, 8080, 5432],
-    attentionScore: 0.85,
-    os: 'Ubuntu LTS 22.04',
-    inboundEdges: 2,
-    outboundEdges: 3
+    status: 'targeted',
+    x: 18,
+    y: 30,
+    openPorts: [135, 445, 3389],
+    attentionScore: 0.74,
+    os: 'Windows 11 Enterprise (23H2)',
+    inboundEdges: 3,
+    outboundEdges: 2
   },
   {
     id: 'db-02',
     name: 'DB-02',
     ip: '10.0.0.31',
-    role: 'Primary Customer Datastore',
+    role: 'Customer Ledger & SQL Storage',
     segment: 'corporate',
-    status: 'elevated',
-    x: 72,
-    y: 38,
-    openPorts: [5432, 27017],
-    attentionScore: 0.64,
-    os: 'Debian 12 Bookworm',
-    inboundEdges: 3,
-    outboundEdges: 1
-  },
-  {
-    id: 'c2-ext',
-    name: 'C2-EXT',
-    ip: '185.220.101.4',
-    role: 'External Malicious Ingress / C2 Node',
-    segment: 'dmz',
-    status: 'compromised',
-    x: 88,
-    y: 72,
-    openPorts: [443, 8443, 9001],
-    attentionScore: 0.96,
-    os: 'Unknown Host (Tor Exit/Bulletproof VPS)',
-    inboundEdges: 1,
-    outboundEdges: 4
+    status: 'normal',
+    x: 82,
+    y: 60,
+    openPorts: [5432, 9100],
+    attentionScore: 0.58,
+    os: 'RHEL 9.2 Enterprise',
+    inboundEdges: 2,
+    outboundEdges: 0
   }
 ];
 
 export const INITIAL_EDGES: NetworkEdge[] = [
-  {
-    id: 'e-c2-app07',
-    source: 'c2-ext',
-    target: 'app-07',
-    type: 'attack',
-    weight: 0.88,
-    port: 443,
-    protocol: 'HTTPS / RevShell',
-    attention: 0.88
-  },
   {
     id: 'e-app07-dc01',
     source: 'app-07',
@@ -107,6 +107,16 @@ export const INITIAL_EDGES: NetworkEdge[] = [
     port: 445,
     protocol: 'SMB / PsExec',
     attention: 0.92
+  },
+  {
+    id: 'e-c2-app07',
+    source: 'c2-ext',
+    target: 'app-07',
+    type: 'attack',
+    weight: 0.88,
+    port: 443,
+    protocol: 'HTTPS / RevShell',
+    attention: 0.88
   },
   {
     id: 'e-dc01-ws042',
@@ -140,79 +150,82 @@ export const INITIAL_EDGES: NetworkEdge[] = [
   }
 ];
 
+/* ========================================================================== */
+/* SECTION 2 - LAYER B: 8-Step Timeline Forecast & Monte Carlo 95% CI Bounds  */
+/* ========================================================================== */
+
 export const FORECAST_POINTS: ForecastPoint[] = [
-  { timeLabel: '-20s', seconds: -20, actual: 24, baseline: 24, ciUpper: 30, ciLower: 18 },
-  { timeLabel: '-15s', seconds: -15, actual: 32, baseline: 32, ciUpper: 39, ciLower: 25 },
-  { timeLabel: '-10s', seconds: -10, actual: 44, baseline: 44, ciUpper: 52, ciLower: 36 },
-  { timeLabel: '-5s', seconds: -5, actual: 61, baseline: 61, ciUpper: 69, ciLower: 53 },
-  { timeLabel: 'NOW', seconds: 0, isNow: true, actual: 87, baseline: 87, counterfactual: 87, ciUpper: 93, ciLower: 81 },
-  { timeLabel: '+5s', seconds: 5, baseline: 92, counterfactual: 58, ciUpper: 96, ciLower: 78 },
-  { timeLabel: '+10s', seconds: 10, baseline: 95, counterfactual: 34, ciUpper: 98, ciLower: 62 },
-  { timeLabel: '+15s', seconds: 15, baseline: 98, counterfactual: 20, ciUpper: 100, ciLower: 48 },
-  { timeLabel: '+20s', seconds: 20, baseline: 99, counterfactual: 12, ciUpper: 100, ciLower: 38 }
+  { timeLabel: '-30s', seconds: -30, actual: 40, baseline: 40, ciUpper: 46, ciLower: 34 },
+  { timeLabel: '-20s', seconds: -20, actual: 58, baseline: 58, ciUpper: 64, ciLower: 52 },
+  { timeLabel: '-10s', seconds: -10, actual: 77, baseline: 77, ciUpper: 83, ciLower: 71 },
+  { timeLabel: 'NOW', seconds: 0, isNow: true, actual: 94, baseline: 94, counterfactual: 94, ciUpper: 98, ciLower: 90 },
+  { timeLabel: '+10s', seconds: 10, baseline: 98, counterfactual: 26, ciUpper: 100, ciLower: 88 },
+  { timeLabel: '+20s', seconds: 20, baseline: 99, counterfactual: 21, ciUpper: 100, ciLower: 86 },
+  { timeLabel: '+30s', seconds: 30, baseline: 100, counterfactual: 15, ciUpper: 100, ciLower: 84 },
+  { timeLabel: '+60s', seconds: 60, baseline: 100, counterfactual: 11, ciUpper: 100, ciLower: 82 }
 ];
 
 export const INITIAL_SIMULATIONS: SimulationRecord[] = [
   {
-    id: 'sim-1',
-    actionType: 'block_port',
-    actionLabel: 'Block 445',
-    targetId: 'ws-042',
-    targetLabel: 'WS-042',
-    port: 445,
-    timeAgo: '4m ago',
-    initialRisk: 87,
-    simulatedRisk: 24,
-    delta: -63,
-    timestamp: Date.now() - 240000
+    id: 'sim-init-1',
+    actionType: 'isolate_host',
+    actionLabel: 'Isolate APP-07 (Gateway)',
+    targetId: 'app-07',
+    targetLabel: 'APP-07 (10.0.0.22)',
+    timeAgo: 'Just now',
+    initialRisk: 94,
+    simulatedRisk: 12,
+    delta: 82,
+    timestamp: Date.now() - 60000
   },
   {
-    id: 'sim-2',
-    actionType: 'isolate_host',
-    actionLabel: 'Isolate',
-    targetId: 'app-07',
-    targetLabel: 'APP-07',
-    timeAgo: '12m ago',
-    initialRisk: 87,
-    simulatedRisk: 12,
-    delta: -75,
-    timestamp: Date.now() - 720000
+    id: 'sim-init-2',
+    actionType: 'block_port',
+    actionLabel: 'Block Port 445 (SMB) on SRV-DC01',
+    targetId: 'srv-dc01',
+    targetLabel: 'SRV-DC01 (10.0.0.15)',
+    port: 445,
+    timeAgo: '5m ago',
+    initialRisk: 94,
+    simulatedRisk: 22,
+    delta: 72,
+    timestamp: Date.now() - 300000
   }
 ];
 
 export const FEATURE_IMPORTANCES: FeatureImportance[] = [
   {
-    id: 'f1',
-    code: 'dst_port: 445 (SMB)',
-    label: 'Lateral movement',
-    percentage: 42,
+    id: 'f-1',
+    code: 'GNN_ATTN_WEIGHT',
+    label: 'Graph Attention Link Weight (0.92)',
+    percentage: 35,
     severity: 'high'
   },
   {
-    id: 'f2',
-    code: 'syn_ack_ratio: 0.94',
-    label: 'Reconnaissance',
+    id: 'f-2',
+    code: 'PORT_VULNERABILITY',
+    label: 'Destination Port 445 (SMB / PsExec) Attack Vector',
     percentage: 28,
     severity: 'high'
   },
   {
-    id: 'f3',
-    code: 'port_entropy: 3.2',
-    label: 'Port scanning',
-    percentage: 18,
+    id: 'f-3',
+    code: 'SESSION_BURST',
+    label: 'Anomalous Connection Density & SYN Asymmetry',
+    percentage: 20,
     severity: 'medium'
   },
   {
-    id: 'f4',
-    code: 'flow_bytes: 524KB',
-    label: 'Exfiltration',
-    percentage: 12,
+    id: 'f-4',
+    code: 'SUB_TOPOLOGY_PATH',
+    label: 'Network Traversal Path (dmz -> corporate)',
+    percentage: 14,
     severity: 'low'
   }
 ];
 
 export const SOURCE_EXPLAINABILITY_MAP: Record<string, SourceExplainabilityProfile> = {
-  // 1. APP-07 -> SRV-DC01 (Internal pivot, SMB PsExec)
+  // 1. APP-07 -> SRV-DC01 (Specification Primary Flagged Edge)
   'e-app07-dc01': {
     edgeId: 'e-app07-dc01',
     sourceId: 'app-07',
@@ -224,22 +237,46 @@ export const SOURCE_EXPLAINABILITY_MAP: Record<string, SourceExplainabilityProfi
     protocol: 'SMB / PsExec',
     port: 445,
     attention: 0.92,
-    mitreTactic: 'TA0008 / T1021 (Remote Services / SMB)',
+    mitreTactic: 'TA0008 (Lateral Movement)',
     mitreTacticCode: 'TA0008',
     predictedStage: 'Lateral movement',
-    riskScore: 87,
+    riskScore: 94,
     riskTrend: '12',
-    leadTime: '+18.4s',
+    leadTime: '+18.5s',
     leadTimeDelta: '+3.2s',
     portEntropy: 3.2,
     synRatio: 0.94,
     logByteVolume: 12.6,
-    summary: 'Anomalous SMB payload and PsExec execution attempted from compromised API gateway APP-07 targeting Domain Controller SRV-DC01.',
+    summary: 'Spatial graph attention model evaluated link from APP-07 to SRV-DC01 on Port 445 (SMB / PsExec) with 0.92 attention weight.',
     features: [
-      { id: 'f-app07-1', code: 'dst_port: 445 (SMB)', label: 'Lateral movement', percentage: 42, severity: 'high' },
-      { id: 'f-app07-2', code: 'syn_ack_ratio: 0.94', label: 'Reconnaissance', percentage: 28, severity: 'high' },
-      { id: 'f-app07-3', code: 'port_entropy: 3.2', label: 'Port scanning', percentage: 18, severity: 'medium' },
-      { id: 'f-app07-4', code: 'flow_bytes: 524KB', label: 'Credential payload', percentage: 12, severity: 'low' }
+      {
+        id: 'f-1',
+        code: 'GNN_ATTN_WEIGHT',
+        label: 'Graph Attention Link Weight (0.92)',
+        percentage: 35,
+        severity: 'high'
+      },
+      {
+        id: 'f-2',
+        code: 'PORT_VULNERABILITY',
+        label: 'Destination Port 445 (SMB / PsExec) Attack Vector',
+        percentage: 28,
+        severity: 'high'
+      },
+      {
+        id: 'f-3',
+        code: 'SESSION_BURST',
+        label: 'Anomalous Connection Density & SYN Asymmetry',
+        percentage: 20,
+        severity: 'medium'
+      },
+      {
+        id: 'f-4',
+        code: 'SUB_TOPOLOGY_PATH',
+        label: 'Network Traversal Path (dmz -> corporate)',
+        percentage: 14,
+        severity: 'low'
+      }
     ]
   },
 
@@ -255,7 +292,7 @@ export const SOURCE_EXPLAINABILITY_MAP: Record<string, SourceExplainabilityProfi
     protocol: 'HTTPS / RevShell',
     port: 443,
     attention: 0.88,
-    mitreTactic: 'TA0011 / T1071 (Web Protocols / C2 Beacon)',
+    mitreTactic: 'TA0011 (Command and Control)',
     mitreTacticCode: 'TA0011',
     predictedStage: 'Initial C2 Ingress',
     riskScore: 96,
@@ -286,7 +323,7 @@ export const SOURCE_EXPLAINABILITY_MAP: Record<string, SourceExplainabilityProfi
     protocol: 'RDP Sync',
     port: 3389,
     attention: 0.68,
-    mitreTactic: 'TA0006 / T1558 (Kerberoasting / Overpass-the-Hash)',
+    mitreTactic: 'TA0006 (Privilege Escalation)',
     mitreTacticCode: 'TA0006',
     predictedStage: 'Privilege Escalation & RDP',
     riskScore: 76,
@@ -317,7 +354,7 @@ export const SOURCE_EXPLAINABILITY_MAP: Record<string, SourceExplainabilityProfi
     protocol: 'DB Client Access',
     port: 5432,
     attention: 0.61,
-    mitreTactic: 'TA0010 / T1048 (Data Staging / Exfiltration)',
+    mitreTactic: 'TA0010 (Exfiltration)',
     mitreTacticCode: 'TA0010',
     predictedStage: 'Exfiltration Staging',
     riskScore: 62,
@@ -348,7 +385,7 @@ export const SOURCE_EXPLAINABILITY_MAP: Record<string, SourceExplainabilityProfi
     protocol: 'HTTP Internal API',
     port: 8080,
     attention: 0.35,
-    mitreTactic: 'TA0043 / T1046 (Network Service Discovery)',
+    mitreTactic: 'TA0043 (Reconnaissance)',
     mitreTacticCode: 'TA0043',
     predictedStage: 'Internal Reconnaissance',
     riskScore: 48,
@@ -384,7 +421,7 @@ export const getExplainabilityForEdge = (edge: NetworkEdge): SourceExplainabilit
     protocol: edge.protocol,
     port: edge.port,
     attention: edge.attention,
-    mitreTactic: 'TA0008 / T1021 (Generic Vector)',
+    mitreTactic: 'TA0008 (Lateral Movement)',
     mitreTacticCode: 'TA0008',
     predictedStage: 'Lateral Propagation',
     riskScore: Math.round(edge.attention * 100),
@@ -415,41 +452,221 @@ export const getExplainabilityForSource = (sourceHostId: string): SourceExplaina
 };
 
 export const KILL_CHAIN_STAGES: KillChainStage[] = [
-  { step: 1, name: 'Baseline', status: 'completed', tacticId: 'TA0001' },
-  { step: 2, name: 'Recon', status: 'completed', tacticId: 'TA0043' },
-  { step: 3, name: 'Initial Access', status: 'completed', tacticId: 'TA0002' },
-  { step: 4, name: 'Credential', status: 'completed', tacticId: 'TA0006' },
-  { step: 5, name: 'Lateral', status: 'active', tacticId: 'TA0008' },
-  { step: 6, name: 'C2', status: 'upcoming', tacticId: 'TA0011' },
-  { step: 7, name: 'Exfiltration', status: 'upcoming', tacticId: 'TA0010' }
+  { step: 1, name: 'Reconnaissance', status: 'completed', tacticId: 'TA0043' },
+  { step: 2, name: 'Weaponization', status: 'completed', tacticId: 'TA0042' },
+  { step: 3, name: 'Delivery & Exploit', status: 'completed', tacticId: 'TA0001' },
+  { step: 4, name: 'Lateral Movement', status: 'active', tacticId: 'TA0008' },
+  { step: 5, name: 'Target Action / Infiltration', status: 'upcoming', tacticId: 'TA0040' }
 ];
 
 export const INITIAL_ALERTS: TelemetryAlert[] = [
   {
-    id: 'alt-1',
-    timestamp: '14:32:16',
+    id: 'alt-target',
+    timestamp: '01:50:32',
     severity: 'critical',
-    source: '10.0.0.22 (APP-07)',
-    target: '10.0.0.15 (SRV-DC01)',
-    message: 'Anomalous SMB payload detected via port 445 (Possible Pass-the-Hash / PsExec)',
+    source: 'APP-07',
+    target: 'SRV-DC01 (10.0.0.15)',
+    message: 'SMB / PsExec Remote Execution from APP-07',
     port: 445
   },
   {
-    id: 'alt-2',
-    timestamp: '14:31:54',
+    id: 'alt-c2',
+    timestamp: '01:48:15',
     severity: 'high',
-    source: '185.220.101.4 (C2-EXT)',
-    target: '10.0.0.22 (APP-07)',
-    message: 'C2 Beacon interval observed matching Cobalt Strike malleable profile',
+    source: 'C2-EXT (185.220.101.4)',
+    target: 'APP-07 (10.0.0.22)',
+    message: 'Encrypted C2 reverse shell telemetry beacon active on port 443',
     port: 443
   },
   {
-    id: 'alt-3',
-    timestamp: '14:30:20',
+    id: 'alt-recon',
+    timestamp: '01:42:00',
     severity: 'medium',
-    source: '10.0.0.5 (WS-042)',
-    target: '10.0.0.15 (SRV-DC01)',
-    message: 'High port entropy burst detected across internal subnets',
+    source: 'WS-042 (10.0.0.5)',
+    target: 'SRV-DC01 (10.0.0.15)',
+    message: 'Anomalous SYN handshake asymmetry targeting RPC endpoints',
     port: 135
   }
 ];
+
+/* ========================================================================== */
+/* SECTION 1 & 2 - LAYER A: Python ML World Model Sample Data from Spec       */
+/* ========================================================================== */
+
+export const ML_PREDICT_SAMPLE: PredictResponse = {
+  timeline: [
+    {
+      t: 105.0,
+      infiltration_prob: 0.74,
+      stage: 'Lateral Movement',
+      stage_conf: 0.82
+    },
+    {
+      t: 110.0,
+      infiltration_prob: 0.81,
+      stage: 'Lateral Movement',
+      stage_conf: 0.86
+    }
+  ],
+  current_stage: 'Lateral Movement',
+  mitre_technique: 'T1021 (Lateral Movement)',
+  forecast_K: 4,
+  top_features: [
+    { name: 'syn_ratio', contribution: 0.34 },
+    { name: 'port_entropy', contribution: 0.28 },
+    { name: 'flow_bytes', contribution: 0.21 },
+    { name: 'ack_ratio', contribution: 0.17 }
+  ],
+  flagged_edges: [
+    {
+      src: '10.0.0.22',
+      dst: '10.0.0.15',
+      attn: 0.924
+    },
+    {
+      src: '185.220.101.4',
+      dst: '10.0.0.22',
+      attn: 0.881
+    }
+  ],
+  ood_score: 0.12,
+  uncertainty_std: 0.058,
+  lead_time_seconds: 15.2
+};
+
+export const INITIAL_COUNTERFACTUAL_SAMPLE: CounterfactualResponse = {
+  action: 'isolate_host',
+  target: '10.0.0.22 (APP-07)',
+  original_risk: 0.94,
+  recalculated_risk: 0.12,
+  risk_reduction: 0.82,
+  business_disruption_cost: 0.14,
+  net_defense_score: 0.68,
+  stage_after_action: 'Benign',
+  latency_ms: 18.6,
+  collateral_severed_edges: 3,
+  severed_connections_summary: 'Severed 3 lateral links (10.0.0.22 <-> 10.0.0.15, 10.0.0.5, 10.0.0.72) halting traversal'
+};
+
+export const INITIAL_RANKED_INTERVENTIONS: RankedIntervention[] = [
+  {
+    rank: 1,
+    action: 'isolate_host',
+    actionLabel: 'Isolate Host',
+    target: '10.0.0.22',
+    targetLabel: 'APP-07 (Compromised API Gateway)',
+    riskReduction: 0.82,
+    businessDisruptionCost: 0.14,
+    netDefenseScore: 0.68,
+    latencyMs: 18.6,
+    collateralSeveredEdges: 3,
+    projectedStage: 'Benign',
+    recommended: true,
+    rationale: 'Decouples primary pivot bridge, collapses lateral traversal towards SRV-DC01 while preserving internal corporate subnets.',
+    details: 'Mathematically removes APP-07 edge weights, dropping risk from 0.94 to 0.12 in 18.6ms.'
+  },
+  {
+    rank: 2,
+    action: 'block_port',
+    actionLabel: 'Block Port',
+    target: '445',
+    targetLabel: 'Port 445 (SMB) across DMZ Boundary',
+    riskReduction: 0.61,
+    businessDisruptionCost: 0.08,
+    netDefenseScore: 0.53,
+    latencyMs: 14.2,
+    collateralSeveredEdges: 1,
+    projectedStage: 'Internal Recon',
+    recommended: false,
+    rationale: 'Stops DCE/RPC & SMB pipe exploitation; leaves secondary HTTP/8080 API vector partially open.',
+    details: 'Drops SMB propagation risk to 0.33 with minimal collateral impact on non-file traffic.'
+  },
+  {
+    rank: 3,
+    action: 'segment_subnet',
+    actionLabel: 'Segment Subnet',
+    target: '10.0.0.0/24',
+    targetLabel: 'Cut Subnet 10.0.0.0/24 from 192.168.1.0/24',
+    riskReduction: 0.76,
+    businessDisruptionCost: 0.28,
+    netDefenseScore: 0.48,
+    latencyMs: 22.4,
+    collateralSeveredEdges: 8,
+    projectedStage: 'Containment Zone',
+    recommended: false,
+    rationale: 'Prevents cross-subnet lateral penetration, but incurs higher business disruption by severing finance API sync.',
+    details: 'Isolates entire DMZ subnet from Corporate VLAN, severing 8 active data pipes.'
+  },
+  {
+    rank: 4,
+    action: 'honeypot_divert',
+    actionLabel: 'Honeypot Divert',
+    target: '10.0.99.100',
+    targetLabel: 'Reroute C2 Flow to Decoy Sink (10.0.99.100)',
+    riskReduction: 0.52,
+    businessDisruptionCost: 0.05,
+    netDefenseScore: 0.47,
+    latencyMs: 19.1,
+    collateralSeveredEdges: 0,
+    projectedStage: 'Deception Trap',
+    recommended: false,
+    rationale: 'Silently traps external C2 in honeypot sandbox without alerting threat actor; internal pivot requires secondary mitigation.',
+    details: 'Reroutes flow table entries to isolated high-interaction deception container.'
+  },
+  {
+    rank: 5,
+    action: 'rate_limit',
+    actionLabel: 'Rate Limit',
+    target: '8080',
+    targetLabel: 'Rate Limit 0.5x on Port 8080 & SYN Flows',
+    riskReduction: 0.38,
+    businessDisruptionCost: 0.04,
+    netDefenseScore: 0.34,
+    latencyMs: 11.8,
+    collateralSeveredEdges: 0,
+    projectedStage: 'Lateral Movement',
+    recommended: false,
+    rationale: 'Mitigates buffer exhaustion and dampens SYN flood packet dynamics, but does not eradicate authenticated credential spray.',
+    details: 'Applies token bucket dampening to suppress volume spikes by 50%.'
+  }
+];
+
+export const INITIAL_OOD_STATE: OODAutoencoderState = {
+  oodScore: 0.12,
+  reconstructionError: 0.048,
+  reconstructionThreshold: 0.150,
+  isZeroDayAnomaly: false,
+  homoscedasticUncertaintySigma: 0.042,
+  latentBottleneckDim: 32,
+  zeroDayAlertMessage: 'Latent space reconstruction nominal. Topology flow vectors match known training manifold.'
+};
+
+export const INITIAL_MODEL_ARCHITECTURE: ModelArchitectureTelemetry = {
+  edgeDropoutRate: 0.15,
+  denseAttentionCollapsePrevented: true,
+  vectorizedFlowSpeedup: '14.8x speedup (np.where + np.char.add)',
+  flowAggregationLatencyMs: 7.8,
+  inferenceEngineCli: 'Standalone dpkt CLI (scripts/run_inference.py - no Scapy hang)',
+  avgCounterfactualLatencyMs: 18.2
+};
+
+export const BENCHMARK_SUMMARY_SAMPLE: BenchmarkSummary = {
+  world_model: {
+    f1: 0.941,
+    precision: 0.952,
+    recall: 0.931,
+    fpr: 0.018,
+    auroc: 0.974,
+    brier_score: 0.058,
+    lead_time_seconds: 15.2
+  },
+  logistic_baseline: {
+    f1: 0.682,
+    precision: 0.651,
+    recall: 0.718,
+    fpr: 0.145,
+    auroc: 0.742,
+    brier_score: 0.221,
+    lead_time_seconds: 0.0
+  }
+};

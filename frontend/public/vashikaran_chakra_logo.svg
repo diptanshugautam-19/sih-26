@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" fill="none" width="100%" height="100%">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1120" fill="none" width="100%" height="100%">
   <!-- VASHIKARAN Cyber Defence Chakra Emblem - Pure Vector Logo (Transparent Background) -->
   <defs>
     <!-- Deep Navy Palette matching Ashoka Chakra & Cyber Framework -->
@@ -12,43 +12,43 @@
     <!-- Top-Left Arc (from ~186° to ~267°) -->
     <path
       d="M 77 500 A 425 425 0 0 1 494 75"
-      stroke="#132B50"
+      stroke="#102754"
       stroke-width="26"
       stroke-linecap="square"
     />
     <!-- Bottom-Left Arc (from ~93° to ~174°) -->
     <path
       d="M 494 925 A 425 425 0 0 1 77 500"
-      stroke="#132B50"
+      stroke="#102754"
       stroke-width="26"
       stroke-linecap="square"
     />
     <!-- Right Hemisphere Arc (from 273° through 0° to 87°) -->
     <path
       d="M 506 75 A 425 425 0 0 1 506 925"
-      stroke="#132B50"
+      stroke="#102754"
       stroke-width="26"
       stroke-linecap="square"
     />
 
     <!-- Vertical Central Dividers (Top & Bottom Gaps) -->
-    <line x1="500" y1="75" x2="500" y2="310" stroke="#132B50" stroke-width="16" stroke-linecap="square" />
-    <line x1="500" y1="690" x2="500" y2="925" stroke="#132B50" stroke-width="16" stroke-linecap="square" />
+    <line x1="500" y1="75" x2="500" y2="310" stroke="#102754" stroke-width="16" stroke-linecap="square" />
+    <line x1="500" y1="690" x2="500" y2="925" stroke="#102754" stroke-width="16" stroke-linecap="square" />
 
     <!-- 2. RIGHT HEMISPHERE: RADAR CONCENTRIC GRID -->
     <!-- Concentric radar arc 1 (R=240) -->
-    <path d="M 500 260 A 240 240 0 0 1 740 500" stroke="#132B50" stroke-width="10" stroke-linecap="square" />
+    <path d="M 500 260 A 240 240 0 0 1 740 500" stroke="#102754" stroke-width="10" stroke-linecap="square" />
     <!-- Concentric radar arc 2 (R=330) -->
-    <path d="M 500 170 A 330 330 0 0 1 830 500" stroke="#132B50" stroke-width="10" stroke-linecap="square" />
+    <path d="M 500 170 A 330 330 0 0 1 830 500" stroke="#102754" stroke-width="10" stroke-linecap="square" />
     <!-- Radial grid line at 315° (top-right quadrant 45°) -->
-    <line x1="500" y1="500" x2="795" y2="205" stroke="#132B50" stroke-width="8" />
+    <line x1="500" y1="500" x2="795" y2="205" stroke="#102754" stroke-width="8" />
 
     <!-- Green Accent Arc passing through Right Network Mesh (R=330) -->
     <path d="M 720 270 A 330 330 0 0 1 740 680" stroke="#138808" stroke-width="12" stroke-linecap="round" />
 
     <!-- 3. RIGHT HEMISPHERE: CYBER NETWORK MESH GRAPH -->
     <!-- Mesh Edges (Lines between nodes) -->
-    <g stroke="#132B50" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#102754" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
       <!-- Outer boundary edges -->
       <line x1="650" y1="180" x2="760" y2="240" />
       <line x1="760" y1="240" x2="840" y2="340" />
@@ -89,7 +89,7 @@
     </g>
 
     <!-- Mesh Vertices / Data Nodes -->
-    <g fill="#132B50">
+    <g fill="#102754">
       <circle cx="650" cy="180" r="10" />
       <circle cx="760" cy="240" r="10" />
       <circle cx="840" cy="340" r="10" />
@@ -128,7 +128,7 @@
     <!-- Saffron / Orange Accent Arc (R=240, upper-left quadrant) -->
     <path
       d="M 270 415 A 240 240 0 0 1 485 262"
-      stroke="#FF9933"
+      stroke="#F58220"
       stroke-width="14"
       stroke-linecap="round"
     />
@@ -145,50 +145,50 @@
     <!-- Inner concentric circuit track (R=305) -->
     <path
       d="M 198 500 A 305 305 0 0 1 370 248"
-      stroke="#132B50"
+      stroke="#102754"
       stroke-width="8"
       stroke-linecap="round"
     />
     <!-- Branch inward to node 1 -->
-    <line x1="370" y1="248" x2="340" y2="305" stroke="#132B50" stroke-width="8" stroke-linecap="round" />
-    <circle cx="340" cy="305" r="12" fill="#132B50" />
+    <line x1="370" y1="248" x2="340" y2="305" stroke="#102754" stroke-width="8" stroke-linecap="round" />
+    <circle cx="340" cy="305" r="12" fill="#102754" />
     <circle cx="340" cy="305" r="4.5" fill="#FFFFFF" />
 
     <!-- Outer concentric circuit track (R=365) -->
     <path
       d="M 136 500 A 365 365 0 0 1 280 260"
-      stroke="#132B50"
+      stroke="#102754"
       stroke-width="8"
       stroke-linecap="round"
     />
     <!-- Branch to node 2 -->
-    <circle cx="280" cy="260" r="12" fill="#132B50" />
+    <circle cx="280" cy="260" r="12" fill="#102754" />
     <circle cx="280" cy="260" r="4.5" fill="#FFFFFF" />
 
     <!-- Lower-Left Inner Circuit track (R=305) -->
     <path
       d="M 198 500 A 305 305 0 0 0 348 732"
-      stroke="#132B50"
+      stroke="#102754"
       stroke-width="8"
       stroke-linecap="round"
     />
     <!-- Branch inward to lower node 1 -->
-    <circle cx="348" cy="732" r="12" fill="#132B50" />
+    <circle cx="348" cy="732" r="12" fill="#102754" />
     <circle cx="348" cy="732" r="4.5" fill="#FFFFFF" />
 
     <!-- Lower-Left Outer Circuit track (R=365) -->
     <path
       d="M 136 500 A 365 365 0 0 0 280 740"
-      stroke="#132B50"
+      stroke="#102754"
       stroke-width="8"
       stroke-linecap="round"
     />
-    <circle cx="280" cy="740" r="12" fill="#132B50" />
+    <circle cx="280" cy="740" r="12" fill="#102754" />
     <circle cx="280" cy="740" r="4.5" fill="#FFFFFF" />
 
     <!-- Horizontal connector through left gap to external terminal node -->
-    <line x1="140" y1="500" x2="80" y2="500" stroke="#132B50" stroke-width="10" stroke-linecap="round" />
-    <circle cx="80" cy="500" r="14" fill="#132B50" />
+    <line x1="140" y1="500" x2="80" y2="500" stroke="#102754" stroke-width="10" stroke-linecap="round" />
+    <circle cx="80" cy="500" r="14" fill="#102754" />
     <circle cx="80" cy="500" r="5" fill="#FFFFFF" />
 
     <!-- CYBER SECURITY SHIELD EMBLEM AT 9 O'CLOCK -->
@@ -196,8 +196,8 @@
       <!-- Shield Outer Contour -->
       <path
         d="M -24 -36 L 24 -36 C 24 -10 24 18 0 42 C -24 18 -24 -10 -24 -36 Z"
-        fill="#132B50"
-        stroke="#132B50"
+        fill="#102754"
+        stroke="#102754"
         stroke-width="4"
         stroke-linejoin="round"
       />
@@ -216,66 +216,66 @@
 
     <!-- 6. ASHOKA CHAKRA (CENTERPIECE) -->
     <!-- Chakra Outer Rim -->
-    <circle cx="500" cy="500" r="186" stroke="#132B50" stroke-width="12" fill="none" />
+    <circle cx="500" cy="500" r="186" stroke="#102754" stroke-width="12" fill="none" />
 
     <!-- Chakra Inner Hub Border -->
-    <circle cx="500" cy="500" r="64" stroke="#132B50" stroke-width="6" fill="none" />
+    <circle cx="500" cy="500" r="64" stroke="#102754" stroke-width="6" fill="none" />
 
     <!-- Solid Inner Center Hub -->
-    <circle cx="500" cy="500" r="46" fill="#132B50" />
+    <circle cx="500" cy="500" r="46" fill="#102754" />
 
     <!-- 24 Authentic Ashoka Chakra Spokes (Each separated by 15°) -->
     <!-- Spoke 0 (0°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" />
     <!-- Spoke 1 (15°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(15 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(15 500 500)" />
     <!-- Spoke 2 (30°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(30 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(30 500 500)" />
     <!-- Spoke 3 (45°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(45 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(45 500 500)" />
     <!-- Spoke 4 (60°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(60 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(60 500 500)" />
     <!-- Spoke 5 (75°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(75 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(75 500 500)" />
     <!-- Spoke 6 (90°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(90 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(90 500 500)" />
     <!-- Spoke 7 (105°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(105 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(105 500 500)" />
     <!-- Spoke 8 (120°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(120 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(120 500 500)" />
     <!-- Spoke 9 (135°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(135 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(135 500 500)" />
     <!-- Spoke 10 (150°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(150 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(150 500 500)" />
     <!-- Spoke 11 (165°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(165 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(165 500 500)" />
     <!-- Spoke 12 (180°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(180 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(180 500 500)" />
     <!-- Spoke 13 (195°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(195 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(195 500 500)" />
     <!-- Spoke 14 (210°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(210 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(210 500 500)" />
     <!-- Spoke 15 (225°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(225 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(225 500 500)" />
     <!-- Spoke 16 (240°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(240 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(240 500 500)" />
     <!-- Spoke 17 (255°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(255 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(255 500 500)" />
     <!-- Spoke 18 (270°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(270 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(270 500 500)" />
     <!-- Spoke 19 (285°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(285 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(285 500 500)" />
     <!-- Spoke 20 (300°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(300 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(300 500 500)" />
     <!-- Spoke 21 (315°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(315 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(315 500 500)" />
     <!-- Spoke 22 (330°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(330 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(330 500 500)" />
     <!-- Spoke 23 (345°) -->
-    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#132B50" transform="rotate(345 500 500)" />
+    <polygon points="500,436 496,436 498,318 502,318 504,436" fill="#102754" transform="rotate(345 500 500)" />
 
     <!-- 24 Small Beads between spokes near the rim -->
-    <g fill="#132B50">
+    <g fill="#102754">
       <circle cx="500" cy="322" r="3" transform="rotate(7.5 500 500)" />
       <circle cx="500" cy="322" r="3" transform="rotate(22.5 500 500)" />
       <circle cx="500" cy="322" r="3" transform="rotate(37.5 500 500)" />
@@ -302,4 +302,15 @@
       <circle cx="500" cy="322" r="3" transform="rotate(352.5 500 500)" />
     </g>
   </g>
+    <!-- 7. TYPOGRAPHY: VASHIKARAN (Matching User Image Lockup) -->
+    <text
+      x="500"
+      y="1050"
+      text-anchor="middle"
+      font-family="'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif"
+      font-weight="900"
+      font-size="82"
+      letter-spacing="0.18em"
+      fill="#102754"
+    >VASHIKARAN</text>
 </svg>

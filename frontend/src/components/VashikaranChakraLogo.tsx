@@ -1,52 +1,61 @@
 import React from 'react';
 
 export interface VashikaranChakraLogoProps {
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | 'header' | 'full';
+  variant?: 'emblem' | 'full';
   className?: string;
   showPulse?: boolean;
+  backdrop?: boolean;
 }
 
 export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
   size = 'md',
+  variant = 'emblem',
   className = '',
-  showPulse = true
+  showPulse = false,
+  backdrop = false
 }) => {
-  const sizeMap = {
-    sm: 'w-8 h-8',
-    md: 'w-11 h-11 sm:w-12 sm:h-12',
-    lg: 'w-14 h-14',
-    xl: 'w-20 h-20'
+  const sizeMap: Record<string, string> = {
+    xs: 'w-7 h-7',
+    sm: 'w-10 h-10',
+    md: 'w-14 h-14 sm:w-16 sm:h-16',
+    header: 'w-14 h-14 sm:w-16 sm:h-16 lg:w-[72px] lg:h-[72px]',
+    lg: 'w-20 h-20 sm:w-24 sm:h-24',
+    xl: 'w-28 h-28 sm:w-36 sm:h-36',
+    '2xl': 'w-36 h-36 sm:w-44 sm:h-44',
+    '3xl': 'w-48 h-48 sm:w-56 sm:h-56',
+    full: 'w-56 sm:w-64 md:w-72'
   };
 
   const dim = sizeMap[size];
 
   return (
-    <div className={`relative flex items-center justify-center shrink-0 ${dim} ${className}`}>
+    <div className={`relative flex items-center justify-center shrink-0 ${dim} ${backdrop ? 'p-2 rounded-full bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-blue-900/40 shadow-sm' : ''} ${className}`}>
       {/* Pure Vector Circular Logo Emblem - No Background, Only the Image */}
       <svg
-        viewBox="0 0 1000 1000"
+        viewBox={variant === 'full' ? '0 0 1000 1120' : '0 0 1000 1000'}
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="w-full h-full select-none transition-transform duration-300 hover:scale-105"
+        className="w-full h-full select-none transition-transform duration-300 hover:scale-105 drop-shadow-[0_2px_10px_rgba(16,39,84,0.18)] dark:drop-shadow-[0_2px_12px_rgba(43,82,146,0.3)]"
         aria-label="VASHIKARAN Cyber Chakra Emblem"
       >
         <g id="vashikaran-chakra-emblem">
           {/* 1. OUTER BROKEN RING (Thick Deep Navy / Cyber Cyan border with 4 quadrant gaps) */}
           <path
             d="M 77 500 A 425 425 0 0 1 494 75"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="26"
             strokeLinecap="square"
           />
           <path
             d="M 494 925 A 425 425 0 0 1 77 500"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="26"
             strokeLinecap="square"
           />
           <path
             d="M 506 75 A 425 425 0 0 1 506 925"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="26"
             strokeLinecap="square"
           />
@@ -57,7 +66,7 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
             y1="75"
             x2="500"
             y2="310"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="16"
             strokeLinecap="square"
           />
@@ -66,7 +75,7 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
             y1="690"
             x2="500"
             y2="925"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="16"
             strokeLinecap="square"
           />
@@ -74,13 +83,13 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
           {/* 2. RIGHT HEMISPHERE: RADAR CONCENTRIC GRID */}
           <path
             d="M 500 260 A 240 240 0 0 1 740 500"
-            className="stroke-[#132B50] dark:stroke-cyan-500/80 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="10"
             strokeLinecap="square"
           />
           <path
             d="M 500 170 A 330 330 0 0 1 830 500"
-            className="stroke-[#132B50] dark:stroke-cyan-500/80 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="10"
             strokeLinecap="square"
           />
@@ -89,7 +98,7 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
             y1="500"
             x2="795"
             y2="205"
-            className="stroke-[#132B50] dark:stroke-cyan-500/80 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="8"
           />
 
@@ -97,14 +106,14 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
           <path
             d="M 720 270 A 330 330 0 0 1 740 680"
             stroke="#138808"
-            className="dark:stroke-emerald-400"
+            className="dark:stroke-[#22C55E]"
             strokeWidth="12"
             strokeLinecap="round"
           />
 
           {/* 3. RIGHT HEMISPHERE: CYBER NETWORK MESH GRAPH */}
           <g
-            className="stroke-[#132B50] dark:stroke-cyan-400/90 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="6"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -149,7 +158,7 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
           </g>
 
           {/* Mesh Vertices / Data Nodes */}
-          <g className="fill-[#132B50] dark:fill-cyan-400 transition-colors">
+          <g className="fill-[#102754] dark:fill-[#2B5292] transition-colors">
             <circle cx="650" cy="180" r="10" />
             <circle cx="760" cy="240" r="10" />
             <circle cx="840" cy="340" r="10" />
@@ -167,7 +176,7 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
           </g>
 
           {/* Node Highlight Centers */}
-          <g className="fill-white dark:fill-slate-900 transition-colors">
+          <g className="fill-white dark:fill-[#FFFFFF] transition-colors">
             <circle cx="650" cy="180" r="3.5" />
             <circle cx="760" cy="240" r="3.5" />
             <circle cx="840" cy="340" r="3.5" />
@@ -205,7 +214,7 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
           {/* Inner concentric circuit track (R=305) */}
           <path
             d="M 198 500 A 305 305 0 0 1 370 248"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="8"
             strokeLinecap="round"
           />
@@ -214,42 +223,42 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
             y1="248"
             x2="340"
             y2="305"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="8"
             strokeLinecap="round"
           />
-          <circle cx="340" cy="305" r="12" className="fill-[#132B50] dark:fill-cyan-400 transition-colors" />
-          <circle cx="340" cy="305" r="4.5" className="fill-white dark:fill-slate-900 transition-colors" />
+          <circle cx="340" cy="305" r="12" className="fill-[#102754] dark:fill-[#2B5292] transition-colors" />
+          <circle cx="340" cy="305" r="4.5" className="fill-white dark:fill-[#FFFFFF] transition-colors" />
 
           {/* Outer concentric circuit track (R=365) */}
           <path
             d="M 136 500 A 365 365 0 0 1 280 260"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="8"
             strokeLinecap="round"
           />
-          <circle cx="280" cy="260" r="12" className="fill-[#132B50] dark:fill-cyan-400 transition-colors" />
-          <circle cx="280" cy="260" r="4.5" className="fill-white dark:fill-slate-900 transition-colors" />
+          <circle cx="280" cy="260" r="12" className="fill-[#102754] dark:fill-[#2B5292] transition-colors" />
+          <circle cx="280" cy="260" r="4.5" className="fill-white dark:fill-[#FFFFFF] transition-colors" />
 
           {/* Lower-Left Inner Circuit track (R=305) */}
           <path
             d="M 198 500 A 305 305 0 0 0 348 732"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="8"
             strokeLinecap="round"
           />
-          <circle cx="348" cy="732" r="12" className="fill-[#132B50] dark:fill-cyan-400 transition-colors" />
-          <circle cx="348" cy="732" r="4.5" className="fill-white dark:fill-slate-900 transition-colors" />
+          <circle cx="348" cy="732" r="12" className="fill-[#102754] dark:fill-[#2B5292] transition-colors" />
+          <circle cx="348" cy="732" r="4.5" className="fill-white dark:fill-[#FFFFFF] transition-colors" />
 
           {/* Lower-Left Outer Circuit track (R=365) */}
           <path
             d="M 136 500 A 365 365 0 0 0 280 740"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="8"
             strokeLinecap="round"
           />
-          <circle cx="280" cy="740" r="12" className="fill-[#132B50] dark:fill-cyan-400 transition-colors" />
-          <circle cx="280" cy="740" r="4.5" className="fill-white dark:fill-slate-900 transition-colors" />
+          <circle cx="280" cy="740" r="12" className="fill-[#102754] dark:fill-[#2B5292] transition-colors" />
+          <circle cx="280" cy="740" r="4.5" className="fill-white dark:fill-[#FFFFFF] transition-colors" />
 
           {/* Horizontal connector through left gap to external terminal node */}
           <line
@@ -257,30 +266,30 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
             y1="500"
             x2="80"
             y2="500"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="10"
             strokeLinecap="round"
           />
-          <circle cx="80" cy="500" r="14" className="fill-[#132B50] dark:fill-cyan-400 transition-colors" />
-          <circle cx="80" cy="500" r="5" className="fill-white dark:fill-slate-900 transition-colors" />
+          <circle cx="80" cy="500" r="14" className="fill-[#102754] dark:fill-[#2B5292] transition-colors" />
+          <circle cx="80" cy="500" r="5" className="fill-white dark:fill-[#FFFFFF] transition-colors" />
 
           {/* CYBER SECURITY SHIELD EMBLEM AT 9 O'CLOCK */}
           <g transform="translate(145, 500)">
             <path
               d="M -24 -36 L 24 -36 C 24 -10 24 18 0 42 C -24 18 -24 -10 -24 -36 Z"
-              className="fill-[#132B50] stroke-[#132B50] dark:fill-cyan-500 dark:stroke-cyan-400 transition-colors"
+              className="fill-[#102754] stroke-[#102754] dark:fill-[#2B5292] dark:stroke-[#2B5292] transition-colors"
               strokeWidth="4"
               strokeLinejoin="round"
             />
             {/* Shield Left Half Accent */}
             <path
               d="M -20 -32 L 0 -32 L 0 36 C -18 16 -18 -8 -20 -32 Z"
-              className="fill-cyan-600 dark:fill-cyan-300 transition-colors"
+              className="fill-cyan-600 dark:fill-[#3864AC] transition-colors"
             />
             {/* Shield Right Half Dark Accent */}
             <path
               d="M 0 -32 L 20 -32 C 18 -8 18 16 0 36 Z"
-              className="fill-[#0F172A] dark:fill-cyan-900 transition-colors"
+              className="fill-[#0F172A] dark:fill-[#102754] transition-colors"
             />
             {/* Shield Center Divider */}
             <line x1="0" y1="-32" x2="0" y2="36" stroke="#FFFFFF" strokeWidth="2" />
@@ -292,7 +301,7 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
             cx="500"
             cy="500"
             r="186"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="12"
             fill="none"
           />
@@ -302,7 +311,7 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
             cx="500"
             cy="500"
             r="64"
-            className="stroke-[#132B50] dark:stroke-cyan-400 transition-colors"
+            className="stroke-[#102754] dark:stroke-[#2B5292] transition-colors"
             strokeWidth="6"
             fill="none"
           />
@@ -312,11 +321,11 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
             cx="500"
             cy="500"
             r="46"
-            className="fill-[#132B50] dark:fill-cyan-400 transition-colors"
+            className="fill-[#102754] dark:fill-[#2B5292] transition-colors"
           />
 
           {/* 24 Authentic Ashoka Chakra Spokes (Each rotated by 15°) */}
-          <g className="fill-[#132B50] dark:fill-cyan-400 transition-colors">
+          <g className="fill-[#102754] dark:fill-[#2B5292] transition-colors">
             <polygon points="500,436 496,436 498,318 502,318 504,436" />
             <polygon points="500,436 496,436 498,318 502,318 504,436" transform="rotate(15 500 500)" />
             <polygon points="500,436 496,436 498,318 502,318 504,436" transform="rotate(30 500 500)" />
@@ -344,7 +353,7 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
           </g>
 
           {/* 24 Small Beads between spokes near the rim */}
-          <g className="fill-[#132B50] dark:fill-cyan-400 transition-colors">
+          <g className="fill-[#102754] dark:fill-[#2B5292] transition-colors">
             <circle cx="500" cy="322" r="3" transform="rotate(7.5 500 500)" />
             <circle cx="500" cy="322" r="3" transform="rotate(22.5 500 500)" />
             <circle cx="500" cy="322" r="3" transform="rotate(37.5 500 500)" />
@@ -371,6 +380,24 @@ export const VashikaranChakraLogo: React.FC<VashikaranChakraLogoProps> = ({
             <circle cx="500" cy="322" r="3" transform="rotate(352.5 500 500)" />
           </g>
         </g>
+
+        {/* 7. TYPOGRAPHY: VASHIKARAN (Rendered when variant is 'full' matching user lockup) */}
+        {variant === 'full' && (
+          <text
+            x="500"
+            y="1055"
+            textAnchor="middle"
+            className="fill-[#102754] dark:fill-[#2B5292] font-sans select-none"
+            style={{
+              fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+              fontWeight: 900,
+              fontSize: '82px',
+              letterSpacing: '0.18em'
+            }}
+          >
+            VASHIKARAN
+          </text>
+        )}
       </svg>
 
       {/* Active telemetry heartbeat indicator */}

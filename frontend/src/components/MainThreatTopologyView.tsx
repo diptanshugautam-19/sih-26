@@ -1019,7 +1019,7 @@ const TargetDetailSection: React.FC<TargetDetailProps> = ({
                 <span>Suspicious Traffic Detected</span>
               </div>
               <p className={isLight ? 'text-slate-600 leading-relaxed font-sans' : 'text-slate-300 leading-relaxed font-sans'}>
-                Network spikes on <strong>Port {predictedNextTarget.incomingPort} ({predictedNextTarget.protocol || 'Protocol'})</strong> from infected machine {predictedNextTarget.primarySourceName || attackerName}.
+                Network spikes on <strong>Port {predictedNextTarget.incomingPort} ({predictedNextTarget.protocol || 'Protocol'})</strong> from infected machine {predictedNextTarget.primarySourceName || 'Infected Node'}.
               </p>
             </div>
 
@@ -1071,7 +1071,7 @@ const TargetDetailSection: React.FC<TargetDetailProps> = ({
             <button
               onClick={() => {
                 if (soundEnabled) playCyberTone('click');
-                onNavigateToWhatIf(targetId);
+                onNavigateToWhatIf();
               }}
               className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl font-sans text-xs font-medium border transition-colors flex items-center justify-center space-x-1.5 ${
                 isLight
