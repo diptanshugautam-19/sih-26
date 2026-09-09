@@ -805,7 +805,7 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
                       What happened to this machine:
                     </div>
                     {node.role?.includes('External') || node.segment === 'dmz'
-                      ? `External actor / ingress endpoint (${node.ip}) compromised via perimeter vulnerability or open ports (${node.openPorts.slice(0, 3).join(', ')}).`
+                      ? `External actor / ingress endpoint (${node.ip}) compromised via perimeter vulnerability or open ports (${(node.openPorts || []).slice(0, 3).join(', ') || 'N/A'}).`
                       : `Internal enterprise host (${node.name} - ${node.ip}) compromised. Inbound anomalous traversal detected with anomaly attention score ${Math.round(node.attentionScore * 100)}%.`}
                   </div>
 

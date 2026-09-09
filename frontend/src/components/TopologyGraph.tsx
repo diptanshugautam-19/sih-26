@@ -102,7 +102,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
 
     return {
       title: `${host.name} (${host.role})`,
-      roleDesc: `${host.role} · OS: ${host.os} · Open Ports: [${host.openPorts.join(', ')}] · Attention: ${riskPercent}%`,
+      roleDesc: `${host.role} · OS: ${host.os} · Open Ports: [${(host.openPorts || []).join(', ') || 'None'}] · Attention: ${riskPercent}%`,
       status: isC2Node || isComp
         ? '🔴 INFECTED / BREACHED'
         : isTgt
@@ -218,8 +218,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
         <div>| DMZ / EDGE</div>
       </div>
 
-      {/* Interactive Topology Graph Canvas / SVG */}
-      <div className={`relative w-full h-[320px] sm:h-[350px] cyber-grid overflow-hidden ${
+      {/* Interactive Topology Graph Canvas / SVG (Adaptive Responsive Height) */}
+      <div className={`relative w-full h-[320px] sm:h-[400px] lg:h-[460px] cyber-grid overflow-hidden ${
         isLight ? 'bg-slate-50/70' : isMidnight ? 'bg-[#040b18]' : 'bg-[#0f172a]/90'
       }`}>
         {/* Subtle background segment dividing line */}
@@ -619,7 +619,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
 
               <div className="flex items-center justify-between px-1 text-slate-400 text-[11px]">
                 <span>Open Doors (Ports):</span>
-                <span className="font-mono text-cyan-600 dark:text-cyan-400">{selectedHost.openPorts.join(', ')}</span>
+                <span className="font-mono text-cyan-600 dark:text-cyan-400">{(selectedHost.openPorts || []).join(', ') || 'None'}</span>
               </div>
 
               <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg border ${

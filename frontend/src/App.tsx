@@ -71,12 +71,32 @@ export default function App() {
     setAuthUser(null);
   };
 
-  // Navigation: separates clustered single-page layout into multi-page workflow
-  const [activeTab, setActiveTab] = useState<NavigationTab>('main_topology');
+  // Navigation: separates clustered single-page layout into multi-page workflow (persisted in sessionStorage)
+  const [activeTab, setActiveTabState] = useState<NavigationTab>(() => {
+    try {
+      const storedTab = sessionStorage.getItem('vashikaran_active_tab') as NavigationTab;
+      if (storedTab && ['main_topology', 'trajectory', 'what_if', 'explainability', 'benchmarks'].includes(storedTab)) {
+        return storedTab;
+      }
+    } catch {
+      // ignore
+    }
+    return 'main_topology';
+  });
+
+  const setActiveTab = (tab: NavigationTab) => {
+    setActiveTabState(tab);
+    try {
+      sessionStorage.setItem('vashikaran_active_tab', tab);
+    } catch {
+      // ignore
+    }
+  };
 
   // Backend connection & loading states
   const [backendConnected, setBackendConnected] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // Upload Network Capture Modal State
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -163,40 +183,46 @@ export default function App() {
     try {
       setIsRefreshing(true);
       const networkData = await fetchNetworkState();
-      setHosts(networkData.hosts);
-      setEdges(networkData.edges);
-      setAttackedNodes(networkData.attackedNodes);
-      setPredictedNextTarget(networkData.predictedNextTarget);
-      setIsolatedHostIds(networkData.isolatedHostIds || []);
-      setBlockedPorts(networkData.blockedPorts || {});
-      setWindowSeq(networkData.windowSeq);
-      setActiveCapture(networkData.activeCapture || null);
+      const safeHosts = Array.isArray(networkData?.hosts) && networkData.hosts.length > 0 ? networkData.hosts : INITIAL_HOSTS;
+      const safeEdges = Array.isArray(networkData?.edges) && networkData.edges.length > 0 ? networkData.edges : INITIAL_EDGES;
+      setHosts(safeHosts);
+      setEdges(safeEdges);
+      setAttackedNodes(
+        Array.isArray(networkData?.attackedNodes) && networkData.attackedNodes.length > 0
+          ? networkData.attackedNodes
+          : safeHosts.filter((h) => h.status === 'compromised')
+      );
+      setPredictedNextTarget(networkData?.predictedNextTarget || null);
+      setIsolatedHostIds(networkData?.isolatedHostIds || []);
+      setBlockedPorts(networkData?.blockedPorts || {});
+      setWindowSeq(typeof networkData?.windowSeq === 'number' ? networkData.windowSeq : 842);
+      setActiveCapture(networkData?.activeCapture || null);
       setBackendConnected(true);
 
       // Preserve active selections if they still exist in networkData, otherwise select primary target
       setSelectedHostId((prev) => {
-        if (!forceReselect && networkData.hosts.some((h) => h.id === prev)) return prev;
-        return networkData.predictedNextTarget?.hostId || networkData.hosts[0]?.id || 'srv-dc01';
+        if (!forceReselect && safeHosts.some((h) => h.id === prev)) return prev;
+        return networkData?.predictedNextTarget?.hostId || safeHosts[0]?.id || 'srv-dc01';
       });
 
       setSelectedTargetHostId((prev) => {
-        if (!forceReselect && networkData.hosts.some((h) => h.id === prev)) return prev;
-        return networkData.predictedNextTarget?.hostId || networkData.hosts[0]?.id || 'srv-dc01';
+        if (!forceReselect && safeHosts.some((h) => h.id === prev)) return prev;
+        return networkData?.predictedNextTarget?.hostId || safeHosts[0]?.id || 'srv-dc01';
       });
 
       // Synchronize edge selection
-      let edgeToSelect = (!forceReselect && selectedEdge) ? networkData.edges.find((e) => e.id === selectedEdge.id) : null;
-      if (!edgeToSelect && networkData.edges.length > 0) {
-        const tgtHostId = networkData.predictedNextTarget?.hostId;
+      let edgeToSelect = (!forceReselect && selectedEdge) ? safeEdges.find((e) => e.id === selectedEdge.id) : null;
+      if (!edgeToSelect && safeEdges.length > 0) {
+        const tgtHostId = networkData?.predictedNextTarget?.hostId;
         edgeToSelect =
-          networkData.edges.find((e) => e.target === tgtHostId) ||
-          networkData.edges.find((e) => e.type === 'attack') ||
-          networkData.edges[0];
+          safeEdges.find((e) => e.target === tgtHostId) ||
+          safeEdges.find((e) => e.type === 'attack') ||
+          safeEdges[0];
       }
 
       if (edgeToSelect) {
         setSelectedEdge(edgeToSelect);
-        setSelectedPort(edgeToSelect.port);
+        if (edgeToSelect.port) setSelectedPort(edgeToSelect.port);
       }
 
       // Fetch telemetry
@@ -243,6 +269,7 @@ export default function App() {
       setAttackedNodes(INITIAL_HOSTS.filter((h) => h.status === 'compromised'));
     } finally {
       setIsRefreshing(false);
+      setIsInitialLoading(false);
     }
   }, []);
 
