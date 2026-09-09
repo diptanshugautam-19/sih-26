@@ -51,7 +51,7 @@ interface MainThreatTopologyViewProps {
   onRefreshData: () => void;
   isRefreshing: boolean;
   soundEnabled: boolean;
-  onNavigateToWhatIf: () => void;
+  onNavigateToWhatIf: (targetHostId?: string) => void;
   activeCapture?: CaptureMetadata | null;
   onOpenUploadModal?: () => void;
   theme?: AppTheme;
@@ -659,7 +659,7 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
                         <button
                           onClick={() => {
                             if (soundEnabled) playCyberTone('click');
-                            onNavigateToWhatIf();
+                            onNavigateToWhatIf(selectedHost.id);
                           }}
                           className={`px-3.5 py-2 rounded-xl text-xs font-bold font-sans transition-all flex items-center space-x-1.5 ${
                             isLight
@@ -1071,7 +1071,7 @@ const TargetDetailSection: React.FC<TargetDetailProps> = ({
             <button
               onClick={() => {
                 if (soundEnabled) playCyberTone('click');
-                onNavigateToWhatIf();
+                onNavigateToWhatIf(targetId);
               }}
               className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-xl font-sans text-xs font-medium border transition-colors flex items-center justify-center space-x-1.5 ${
                 isLight

@@ -1280,38 +1280,44 @@ async function startServer() {
   // API Route: Action - Run Counterfactual Simulation
   app.post('/api/actions/simulate', (req, res) => {
     const { actionType, targetId, port } = req.body;
-    const targetHost = currentHosts.find((h) => h.id === targetId);
+    const targetHost = currentHosts.find((h) => h.id === targetId || h.name.toLowerCase() === String(targetId).toLowerCase()) || currentHosts[0];
     const predicted = computeNextPredictedTarget();
-    const currentRisk = predicted ? predicted.probabilityPercent : 85;
+    
+    // Infiltration risk from active neural telemetry or predicted target
+    const baseRisk = (customTelemetry && typeof customTelemetry.infiltrationRisk === 'number')
+      ? customTelemetry.infiltrationRisk
+      : (predicted && predicted.probabilityPercent > 25 ? predicted.probabilityPercent : 88);
+    const currentRisk = Math.max(50, Math.round(baseRisk));
 
     let newRisk = 18;
 
     if (actionType === 'isolate_host') {
       if (!targetHost) {
-        newRisk = Math.max(10, Math.round(currentRisk * 0.3));
-      } else if (targetHost.status === 'compromised' || targetHost.segment === 'dmz') {
-        // Isolating the breached / attacker entry point severs ingress sessions at the root
-        newRisk = 8;
-      } else if (targetHost.id === predicted.hostId || targetHost.status === 'targeted') {
-        // Isolating the target prevents lateral penetration
         newRisk = 16;
+      } else if (targetHost.status === 'compromised' || targetHost.segment === 'dmz' || targetHost.role?.toLowerCase().includes('external')) {
+        // Isolating the breached / adversary entry point stops lateral traffic at root
+        newRisk = 8;
+      } else if (targetHost.id === predicted?.hostId || targetHost.status === 'targeted') {
+        // Isolating the targeted crown jewel prevents lateral compromise
+        newRisk = 14;
       } else {
-        // Isolating a secondary host reduces lateral blast radius proportionally
-        newRisk = Math.max(15, Math.round(currentRisk * 0.65));
+        // Isolating secondary workstation reduces blast radius
+        newRisk = Math.max(20, Math.round(currentRisk * 0.32));
       }
     } else if (actionType === 'block_port') {
       const isCriticalPort = port && (
         port === predicted?.incomingPort ||
+        targetHost?.openPorts?.includes(Number(port)) ||
         [21, 22, 80, 443, 445, 3389, 88, 135].includes(Number(port))
       );
       if (isCriticalPort) {
-        newRisk = 19;
+        newRisk = 16;
       } else {
-        newRisk = Math.max(25, Math.round(currentRisk * 0.75));
+        newRisk = Math.max(25, Math.round(currentRisk * 0.45));
       }
     }
 
-    const deltaPts = Math.max(5, Math.round(currentRisk - newRisk));
+    const deltaPts = Math.max(10, Math.round(currentRisk - newRisk));
 
     const targetLabel = targetHost ? `${targetHost.name} (${targetHost.ip})` : targetId;
     const actionLabel = actionType === 'isolate_host'

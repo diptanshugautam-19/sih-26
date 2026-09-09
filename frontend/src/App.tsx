@@ -147,7 +147,18 @@ export default function App() {
       setActiveCapture(networkData.activeCapture || null);
       setBackendConnected(true);
 
-      // Dynamically select and synchronize active edge and host targets
+      // Preserve active selections if they still exist in networkData, otherwise select primary target
+      setSelectedHostId((prev) => {
+        if (!forceReselect && networkData.hosts.some((h) => h.id === prev)) return prev;
+        return networkData.predictedNextTarget?.hostId || networkData.hosts[0]?.id || 'srv-dc01';
+      });
+
+      setSelectedTargetHostId((prev) => {
+        if (!forceReselect && networkData.hosts.some((h) => h.id === prev)) return prev;
+        return networkData.predictedNextTarget?.hostId || networkData.hosts[0]?.id || 'srv-dc01';
+      });
+
+      // Synchronize edge selection
       let edgeToSelect = (!forceReselect && selectedEdge) ? networkData.edges.find((e) => e.id === selectedEdge.id) : null;
       if (!edgeToSelect && networkData.edges.length > 0) {
         const tgtHostId = networkData.predictedNextTarget?.hostId;
@@ -159,12 +170,7 @@ export default function App() {
 
       if (edgeToSelect) {
         setSelectedEdge(edgeToSelect);
-        setSelectedHostId(edgeToSelect.source);
-        setSelectedTargetHostId(edgeToSelect.target);
         setSelectedPort(edgeToSelect.port);
-      } else if (networkData.hosts.length > 0) {
-        setSelectedHostId(networkData.hosts[0].id);
-        setSelectedTargetHostId(networkData.predictedNextTarget?.hostId || networkData.hosts[0].id);
       }
 
       // Fetch telemetry
@@ -208,12 +214,11 @@ export default function App() {
       }
     } catch (err) {
       console.warn('Backend loading attempt, using active fallback state:', err);
-      // Even in fallback, populate attacked nodes & predicted target
       setAttackedNodes(INITIAL_HOSTS.filter((h) => h.status === 'compromised'));
     } finally {
       setIsRefreshing(false);
     }
-  }, [selectedEdge]);
+  }, []);
 
   // Initial backend fetch on mount
   useEffect(() => {
@@ -229,11 +234,9 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isPaused]);
 
-  // Handler for edge selection
+  // Handler for edge selection (clicking on an edge connection in the graph)
   const handleSelectEdge = async (edge: NetworkEdge) => {
     setSelectedEdge(edge);
-    setSelectedHostId(edge.source);
-    setSelectedTargetHostId(edge.target);
     setSelectedPort(edge.port);
 
     try {
@@ -256,12 +259,17 @@ export default function App() {
     }
   };
 
-  // Handler for host selection (clicks on graph nodes or host selector buttons)
+  // Handler for host selection (clicks on any graph node or host selector pill)
   const handleSelectHost = async (hostId: string) => {
     setSelectedHostId(hostId);
     setSelectedTargetHostId(hostId);
 
-    // Auto-pick connected traffic edge so edge metrics and explainability align with the clicked node
+    const host = hosts.find((h) => h.id === hostId);
+    if (host && host.openPorts && host.openPorts.length > 0) {
+      setSelectedPort(host.openPorts[0]);
+    }
+
+    // Auto-pick connected traffic edge for explainability profile without overriding host selection
     const connectedEdges = edges.filter((e) => e.source === hostId || e.target === hostId);
     const primaryEdge =
       connectedEdges.find((e) => e.target === hostId && e.type === 'attack') ||
@@ -269,8 +277,27 @@ export default function App() {
       connectedEdges[0];
 
     if (primaryEdge) {
-      handleSelectEdge(primaryEdge);
+      setSelectedEdge(primaryEdge);
+      fetchExplainability(primaryEdge.id)
+        .then((expData) => {
+          if (expData) setActiveProfile(expData);
+        })
+        .catch(() => {
+          setActiveProfile(getExplainabilityForEdge(primaryEdge));
+        });
     }
+  };
+
+  // Handler for navigation to What-If simulator targeting a specific node
+  const handleNavigateToWhatIf = (targetHostId?: string) => {
+    if (targetHostId) {
+      setSelectedTargetHostId(targetHostId);
+      const h = hosts.find((x) => x.id === targetHostId);
+      if (h && h.openPorts && h.openPorts.length > 0) {
+        setSelectedPort(h.openPorts[0]);
+      }
+    }
+    setActiveTab('what_if');
   };
 
   // Handler for source button click
@@ -327,6 +354,16 @@ export default function App() {
       setDeltaPts(simRes.deltaPts);
       setShowCounterfactualInForecast(true);
 
+      // Dynamically update counterfactual curve in forecast
+      setForecastPoints((prev) =>
+        prev.map((p) => {
+          if (p.seconds <= 0) return p;
+          const ratio = Math.min(1, p.seconds / 15);
+          const counterVal = Math.round(p.baseline * (1 - ratio) + simRes.simulatedRisk * ratio);
+          return { ...p, counterfactual: counterVal };
+        })
+      );
+
       const simList = await fetchSimulations().catch(() => null);
       if (simList && simList.length > 0) {
         setRecentSimulations(simList);
@@ -368,15 +405,10 @@ export default function App() {
   };
 
   const isLight = theme === 'light';
-  const isMidnight = theme === 'midnight';
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${
-      isLight
-        ? 'bg-slate-50 text-slate-900 selection:bg-cyan-500/30 selection:text-cyan-900'
-        : isMidnight
-        ? 'bg-[#040814] text-slate-100 selection:bg-cyan-500/30 selection:text-cyan-200'
-        : 'bg-[#0b0f19] text-slate-100 selection:bg-cyan-500/30 selection:text-cyan-200'
+    <div className={`min-h-screen transition-colors duration-200 ${
+      isLight ? 'bg-slate-100 text-slate-800' : 'bg-[#030914] text-slate-100'
     }`}>
       {/* Top Header with Multi-Page Navigation Tabs and Capture Upload */}
       <Header
@@ -389,7 +421,7 @@ export default function App() {
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         attackedCount={attackedNodes.length}
-        predictedTargetName={predictedNextTarget?.name || 'SRV-DC01'}
+        predictedTargetName={predictedNextTarget?.name || 'Primary Server'}
         predictedProbability={predictedNextTarget?.probabilityPercent || infiltrationRisk}
         backendConnected={backendConnected}
         activeCapture={activeCapture}
@@ -398,9 +430,8 @@ export default function App() {
         onSelectTheme={handleSelectTheme}
       />
 
-      {/* Main Page Area: Shifted down gracefully with generous presentable spacing */}
+      {/* Main Page Area */}
       <main className="flex-1 w-full max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 pb-16">
-        
         {/* VIEW 1: MAIN PAGE (Graphical Nodes + Attacked Nodes + Most Probable Future Target + Probability Issues) */}
         {activeTab === 'main_topology' && (
           <MainThreatTopologyView
@@ -419,7 +450,7 @@ export default function App() {
             onRefreshData={loadBackendData}
             isRefreshing={isRefreshing}
             soundEnabled={soundEnabled}
-            onNavigateToWhatIf={() => setActiveTab('what_if')}
+            onNavigateToWhatIf={handleNavigateToWhatIf}
             activeCapture={activeCapture}
             onOpenUploadModal={() => setIsUploadModalOpen(true)}
             theme={theme}

@@ -62,6 +62,17 @@ export const WhatIfCentre: React.FC<WhatIfCentreProps> = ({
 
   const selectedHost = hosts.find((h) => h.id === selectedTargetHostId) || hosts[0];
 
+  // Auto-sync selected target host if current one doesn't exist in active network hosts
+  React.useEffect(() => {
+    if (hosts.length > 0 && !hosts.some((h) => h.id === selectedTargetHostId)) {
+      const defaultHost = hosts.find((h) => h.status === 'targeted') || hosts[0];
+      onSelectTargetHost(defaultHost.id);
+      if (defaultHost.openPorts && defaultHost.openPorts.length > 0) {
+        onSelectPort(defaultHost.openPorts[0]);
+      }
+    }
+  }, [hosts, selectedTargetHostId, onSelectTargetHost, onSelectPort]);
+
   const handleDeploy = () => {
     if (soundEnabled) playCyberTone('success');
     onDeployPolicy();

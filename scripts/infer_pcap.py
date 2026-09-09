@@ -568,8 +568,9 @@ def run_pcap_pipeline_json(pcap_path: str, checkpoint_path: str | None = None, m
         y_pos = int(25 + (idx / max(1, len(dmz_ips) - 1)) * 50) if len(dmz_ips) > 1 else 68
         x_pos = 10 + (idx % 2) * 14
         h_id = f"host-{ip.replace('.', '-')}"
-        r_score = host_risks_dict.get(ip, infil_prob if infil_prob > 0.5 else 0.45)
-        st = "compromised" if (infil_prob > 0.6 or r_score > 0.6) else ("targeted" if r_score > 0.35 else "normal")
+        r_score = host_risks_dict.get(ip, infil_prob if infil_prob > 0.5 else 0.88)
+        # Perimeter/DMZ ingress nodes initiating sessions are the breached/compromised source
+        st = "compromised"
         hosts_list.append({
             "id": h_id,
             "name": f"EXT-{ip.split('.')[-1]}",
@@ -592,8 +593,8 @@ def run_pcap_pipeline_json(pcap_path: str, checkpoint_path: str | None = None, m
         x_pos = 45 + (idx % 3) * 18
         h_id = f"host-{ip.replace('.', '-')}"
         r_score = host_risks_dict.get(ip, 0.40)
-        # One high risk corporate host becomes targeted
-        st = "targeted" if (r_score >= 0.35 or idx == 0) else "normal"
+        # Primary corporate victim is targeted; secondary endpoints are normal/monitored
+        st = "targeted" if idx == 0 else ("elevated" if (r_score > 0.5) else "normal")
         role_label = "Domain Controller / Identity" if idx == 0 else ("Internal Database Server" if idx == 1 else f"Workstation Subnet-{ip.split('.')[-2]}")
         hosts_list.append({
             "id": h_id,
