@@ -4,7 +4,7 @@ import fs from 'fs';
 import { execFileSync } from 'child_process';
 import { createServer as createViteServer } from 'vite';
 
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Base in-memory network data state
 interface HostData {
@@ -180,58 +180,36 @@ const INITIAL_EDGES: EdgeData[] = [
 ];
 
 // In-memory state across requests
-let currentHosts: HostData[] = JSON.parse(JSON.stringify(INITIAL_HOSTS));
-let currentEdges: EdgeData[] = JSON.parse(JSON.stringify(INITIAL_EDGES));
+// Starts EMPTY — only populated after user uploads a capture file
+let currentHosts: HostData[] = [];
+let currentEdges: EdgeData[] = [];
 let isolatedHostIds: string[] = [];
 let blockedPorts: { [hostId: string]: number[] } = {};
-let windowSeq = 842;
+let windowSeq = 0;
 let activeCapture: CaptureMetadata | null = null;
 let customPredictedTarget: any = null;
 let customTelemetry: any = null;
 let customForecastPoints: any = null;
 let customAlerts: any = null;
 
-let simulationRecords = [
-  {
-    id: 'sim-init-1',
-    actionType: 'isolate_host',
-    actionLabel: 'Isolate APP-07 (Gateway)',
-    targetId: 'app-07',
-    targetLabel: 'APP-07 (10.0.0.22)',
-    port: undefined as number | undefined,
-    timeAgo: 'Just now',
-    initialRisk: 94,
-    simulatedRisk: 12,
-    delta: 82,
-    timestamp: Date.now() - 60000
-  },
-  {
-    id: 'sim-init-2',
-    actionType: 'block_port',
-    actionLabel: 'Block Port 445 (SMB) on SRV-DC01',
-    targetId: 'srv-dc01',
-    targetLabel: 'SRV-DC01 (10.0.0.15)',
-    port: 445,
-    timeAgo: '5m ago',
-    initialRisk: 94,
-    simulatedRisk: 22,
-    delta: 72,
-    timestamp: Date.now() - 300000
-  }
-];
+let simulationRecords: any[] = [];
 
-// Automatic sequence ticker
+// Automatic sequence ticker (only runs after capture is loaded)
 setInterval(() => {
   windowSeq += 1;
 }, 10000);
 
 // Helper function to calculate the most probable next node to be attacked
-function computeNextPredictedTarget() {
+function computeNextPredictedTarget(): any | null {
+  if (!activeCapture || currentHosts.length === 0) {
+    return null;
+  }
+
   if (customPredictedTarget && !isolatedHostIds.includes(customPredictedTarget.hostId)) {
     return customPredictedTarget;
   }
 
-  // If custom target was isolated or custom PCAP is active, find next non-isolated corporate host dynamically
+  // If custom target was isolated, find next non-isolated corporate host dynamically
   if (customPredictedTarget) {
     const candidate = currentHosts.find(
       (h) => !isolatedHostIds.includes(h.id) && h.status !== 'compromised' && h.segment === 'corporate'
@@ -273,153 +251,49 @@ function computeNextPredictedTarget() {
     }
   }
 
-  const isAppIsolated = isolatedHostIds.includes('app-07');
-  const isDcIsolated = isolatedHostIds.includes('srv-dc01');
-  const isSmbBlocked = (blockedPorts['srv-dc01'] || []).includes(445) || (blockedPorts['app-07'] || []).includes(445);
+  // Dynamically select target from current uploaded hosts
+  const targetHost = currentHosts.find((h) => !isolatedHostIds.includes(h.id) && (h.status === 'targeted' || h.attentionScore > 0.8))
+    || currentHosts.find((h) => !isolatedHostIds.includes(h.id) && h.segment === 'corporate')
+    || currentHosts.find((h) => !isolatedHostIds.includes(h.id))
+    || currentHosts[0];
 
-  if (isAppIsolated || isDcIsolated || isSmbBlocked) {
-    if (!isolatedHostIds.includes('db-02') && !isDcIsolated) {
-      return {
-        hostId: 'db-02',
-        name: 'DB-02',
-        role: 'Customer Ledger & SQL Storage',
-        ip: '10.0.0.31',
-        segment: 'corporate' as const,
-        os: 'RHEL 9.2 Enterprise',
-        probabilityPercent: 44.8,
-        timeToAttackSeconds: 42.0,
-        timeToAttackLabel: '+42.0s',
-        predictedAttackVector: 'PostgreSQL Exfiltration / Port 5432 query burst',
-        primarySourceId: 'srv-dc01',
-        primarySourceName: 'SRV-DC01',
-        incomingPort: 5432,
-        protocol: 'PostgreSQL DB Access',
-        mitreTactic: 'TA0010 (Exfiltration)',
-        mitreTacticCode: 'TA0010',
-        probabilityIssues: [
-          {
-            id: 'iss-db-1',
-            factor: 'Shared Service Account Credentials',
-            description: 'Domain Controller maintains automated query replication credentials stored in plaintext registry.',
-            impactScore: 78,
-            severity: 'high' as const,
-            category: 'credential_leak' as const
-          },
-          {
-            id: 'iss-db-2',
-            factor: 'Unrestricted Port 5432 Route',
-            description: 'Direct corporate subnet routing without an active inline network inspection firewall.',
-            impactScore: 65,
-            severity: 'medium' as const,
-            category: 'network_path' as const
-          }
-        ],
-        recommendedMitigations: [
-          'Rotate database replication service tokens',
-          'Enforce mTLS on PostgreSQL port 5432',
-          'Isolate DB-02 staging storage'
-        ]
-      };
-    }
+  if (!targetHost) return null;
 
-    return {
-      hostId: 'ws-042',
-      name: 'WS-042',
-      role: 'Workstation - Finance Dept',
-      ip: '10.0.0.5',
-      segment: 'corporate' as const,
-      os: 'Windows 11 Enterprise (23H2)',
-      probabilityPercent: 28.5,
-      timeToAttackSeconds: 58.0,
-      timeToAttackLabel: '+58.0s',
-      predictedAttackVector: 'Reverse RDP Sync / Port 3389 Kerberos ticket reuse',
-      primarySourceId: 'srv-dc01',
-      primarySourceName: 'SRV-DC01',
-      incomingPort: 3389,
-      protocol: 'RDP Sync',
-      mitreTactic: 'TA0006 (Privilege Escalation)',
-      mitreTacticCode: 'TA0006',
-      probabilityIssues: [
-        {
-          id: 'iss-ws-1',
-          factor: 'Residual NTLMv2 Fallback',
-          description: 'Finance workstation accepts NTLMv2 hashes if Kerberos authentication fails.',
-          impactScore: 54,
-          severity: 'medium' as const,
-          category: 'protocol_flaw' as const
-        }
-      ],
-      recommendedMitigations: [
-        'Disable RDP Port 3389 network level auth',
-        'Enable Endpoint Isolation on WS-042'
-      ]
-    };
-  }
+  const attacker = currentHosts.find((h) => h.status === 'compromised') || currentHosts[0];
+  const port = targetHost.openPorts[0] || 445;
+  const risk = Math.round((targetHost.attentionScore || 0.85) * 100);
 
-  // Baseline unmitigated target: SRV-DC01 is the critical next target
   return {
-    hostId: 'srv-dc01',
-    name: 'SRV-DC01',
-    role: 'Primary Domain Controller',
-    ip: '10.0.0.15',
-    segment: 'corporate' as const,
-    os: 'Windows Server 2022 Core',
-    probabilityPercent: 94.2,
+    hostId: targetHost.id,
+    name: targetHost.name,
+    role: targetHost.role,
+    ip: targetHost.ip,
+    segment: targetHost.segment,
+    os: targetHost.os,
+    probabilityPercent: risk,
     timeToAttackSeconds: 18.4,
     timeToAttackLabel: '+18.4s',
-    predictedAttackVector: 'SMB / PsExec Execution (Port 445) from compromised APP-07',
-    primarySourceId: 'app-07',
-    primarySourceName: 'APP-07',
-    incomingPort: 445,
-    protocol: 'SMB / PsExec',
-    mitreTactic: 'TA0008 (Lateral Movement) via T1021.002 (SMB/Windows Admin Shares)',
+    predictedAttackVector: `Lateral traversal targeting ${targetHost.name} (Port ${port}) from ${attacker.name}`,
+    primarySourceId: attacker.id,
+    primarySourceName: attacker.name,
+    incomingPort: port,
+    protocol: port === 445 ? 'SMB / PsExec' : port === 5432 ? 'PostgreSQL' : 'TCP / Inspected Flow',
+    mitreTactic: 'Lateral Movement (TA0008) - Remote Services (T1021.002)',
     mitreTacticCode: 'TA0008',
     probabilityIssues: [
       {
-        id: 'iss-1',
-        factor: 'Direct Port 445 (SMB) Exposition',
-        description: 'Compromised API gateway APP-07 maintains an unsegmented, high-privilege RPC/SMB session into the domain controller.',
-        impactScore: 92,
-        severity: 'critical' as const,
-        category: 'protocol_flaw' as const
-      },
-      {
-        id: 'iss-2',
-        factor: 'PsExec Service Creation Vulnerability',
-        description: 'Cached administrative credentials on APP-07 match the Domain Admin group SID on SRV-DC01 without credential guard enabled.',
+        id: 'iss-dyn-1',
+        factor: `Port ${port} Exposition on ${targetHost.name}`,
+        description: `Active link attention detected connecting ${attacker.name} to ${targetHost.name} on destination port ${port}.`,
         impactScore: 88,
-        severity: 'critical' as const,
-        category: 'credential_leak' as const
-      },
-      {
-        id: 'iss-3',
-        factor: 'Graph Attention Weight Anomaly (0.92)',
-        description: 'World Model GNN calculates a 0.92 spatial link attention weight indicating critical lateral movement momentum.',
-        impactScore: 85,
         severity: 'high' as const,
-        category: 'attention_spike' as const
-      },
-      {
-        id: 'iss-4',
-        factor: 'Zero-Trust DMZ Microsegmentation Gap',
-        description: 'Absence of zero-trust microsegmentation between DMZ application tier and core identity servers.',
-        impactScore: 78,
-        severity: 'high' as const,
-        category: 'zero_trust_gap' as const
-      },
-      {
-        id: 'iss-5',
-        factor: 'SYN/ACK Ratio Anomaly (0.94)',
-        description: 'Unusual volumetric TCP handshake bursts matching automated network recon scanners targeting RPC endpoints.',
-        impactScore: 68,
-        severity: 'medium' as const,
-        category: 'network_path' as const
+        category: 'protocol_flaw' as const
       }
     ],
     recommendedMitigations: [
-      'Isolate APP-07 immediately to sever active PsExec link',
-      'Block Port 445 ingress on SRV-DC01 firewalls',
-      'Invalidate Kerberos KRBTGT & cached service tickets'
+      `Isolate ${attacker.name} to sever lateral movement vector`,
+      `Block Port ${port} on ${targetHost.name} perimeter firewall`,
+      `Quarantine ${targetHost.name} pending full incident response analysis`
     ]
   };
 }
@@ -469,6 +343,17 @@ const PRESET_CAPTURES = [
     targetFocus: 'DB-02',
     probability: 91.0,
     threatType: 'Covert Channel C2'
+  },
+  {
+    id: 'preset-enterprise-200mb',
+    title: 'Enterprise APT Attack Infiltration (200 MB)',
+    fileName: 'enterprise_multi_stage_apt_attack_200mb.pcap',
+    fileType: 'pcap',
+    sizeLabel: '200.0 MB',
+    description: 'Full-scale 200MB enterprise capture (10 IP nodes) capturing active Initial Access (T1190) and Lateral Movement (T1021). Demonstrates the World Model rolling out K=4 steps ahead to predict imminent lateral infiltration before core servers are breached.',
+    targetFocus: 'WS-FIN-02',
+    probability: 95.4,
+    threatType: 'Initial Access (TA0001) / Lateral Movement (TA0008)'
   }
 ];
 
@@ -841,6 +726,22 @@ async function startServer() {
 
   // API Route: Live Network State & Predictions
   app.get('/api/network', (req, res) => {
+    // If no capture has been uploaded yet, return empty state with flag
+    if (!activeCapture) {
+      return res.json({
+        noDataUploaded: true,
+        hosts: [],
+        edges: [],
+        attackedNodes: [],
+        predictedNextTarget: null,
+        windowSeq: 0,
+        isolatedHostIds: [],
+        blockedPorts: {},
+        lastUpdated: new Date().toISOString(),
+        activeCapture: null
+      });
+    }
+
     const updatedHosts = currentHosts.map((h) => {
       const isIsolated = isolatedHostIds.includes(h.id);
       return {
@@ -856,6 +757,7 @@ async function startServer() {
     const predictedNextTarget = computeNextPredictedTarget();
 
     res.json({
+      noDataUploaded: false,
       hosts: updatedHosts,
       edges: currentEdges,
       attackedNodes,
@@ -871,6 +773,26 @@ async function startServer() {
   // API Route: Get Preset Captures
   app.get('/api/captures/presets', (req, res) => {
     res.json(PRESET_CAPTURES);
+  });
+
+  // API Route: Download Capture PCAP
+  app.get('/api/captures/download/:fileName', (req, res) => {
+    const rawFileName = path.basename(req.params.fileName);
+    const searchDirs = [
+      path.join(process.cwd(), '..', 'data', 'pcaps_sample'),
+      path.join(process.cwd(), '..', 'data', 'uploads'),
+      path.join(process.cwd(), 'data', 'pcaps_sample'),
+      path.join(process.cwd(), 'data', 'uploads')
+    ];
+    for (const d of searchDirs) {
+      const fullPath = path.join(d, rawFileName);
+      if (fs.existsSync(fullPath)) {
+        res.setHeader('Content-Disposition', `attachment; filename="${rawFileName}"`);
+        res.setHeader('Content-Type', 'application/vnd.tcpdump.pcap');
+        return res.sendFile(fullPath);
+      }
+    }
+    res.status(404).json({ error: `Capture file ${rawFileName} not found` });
   });
 
   // API Route: Load Preset Capture
@@ -1200,6 +1122,360 @@ async function startServer() {
         threatNodesDetected: 2,
         uploadedAt: new Date().toISOString()
       };
+    } else if (preset.id === 'preset-c2tunnel') {
+      currentHosts = [
+        {
+          id: 'c2-ext',
+          name: 'C2-COBALT',
+          ip: '185.220.101.4',
+          role: 'External Threat Actor / C2 TeamServer',
+          segment: 'dmz',
+          status: 'compromised',
+          x: 10,
+          y: 70,
+          openPorts: [443, 8443],
+          attentionScore: 0.98,
+          os: 'Cobalt Strike Malleable TeamServer',
+          inboundEdges: 0,
+          outboundEdges: 2
+        },
+        {
+          id: 'db-02',
+          name: 'DB-02',
+          ip: '10.0.0.31',
+          role: 'Customer Ledger & Financial Storage',
+          segment: 'corporate',
+          status: 'targeted',
+          x: 55,
+          y: 35,
+          openPorts: [443, 5432],
+          attentionScore: 0.93,
+          os: 'RHEL 9.2 Enterprise',
+          inboundEdges: 2,
+          outboundEdges: 1
+        },
+        {
+          id: 'srv-dc01',
+          name: 'SRV-DC01',
+          ip: '10.0.0.15',
+          role: 'Corporate DNS & Identity Controller',
+          segment: 'corporate',
+          status: 'normal',
+          x: 80,
+          y: 55,
+          openPorts: [53, 88, 389],
+          attentionScore: 0.45,
+          os: 'Windows Server 2022 Core',
+          inboundEdges: 1,
+          outboundEdges: 0
+        }
+      ];
+
+      currentEdges = [
+        {
+          id: 'e-c2-1',
+          source: 'c2-ext',
+          target: 'db-02',
+          type: 'attack',
+          weight: 0.96,
+          port: 443,
+          protocol: 'TLS 1.3 Malleable Beacon',
+          attention: 0.96
+        },
+        {
+          id: 'e-c2-2',
+          source: 'db-02',
+          target: 'srv-dc01',
+          type: 'elevated',
+          weight: 0.72,
+          port: 53,
+          protocol: 'Covert DNS TXT Tunneling',
+          attention: 0.72
+        }
+      ];
+
+      customPredictedTarget = {
+        hostId: 'db-02',
+        name: 'DB-02',
+        role: 'Customer Ledger & Financial Storage',
+        ip: '10.0.0.31',
+        segment: 'corporate' as const,
+        os: 'RHEL 9.2 Enterprise',
+        probabilityPercent: 91.0,
+        timeToAttackSeconds: 14.0,
+        timeToAttackLabel: '+14.0s',
+        predictedAttackVector: 'Cobalt Strike Malleable HTTPS Beacon Tunnel (Port 443) from 185.220.101.4',
+        primarySourceId: 'c2-ext',
+        primarySourceName: 'C2-COBALT',
+        incomingPort: 443,
+        protocol: 'TLS 1.3 / Malleable C2',
+        mitreTactic: 'TA0011 (Command and Control) via T1071.001 (Web Protocols)',
+        mitreTacticCode: 'TA0011',
+        probabilityIssues: [
+          {
+            id: 'iss-c2-1',
+            factor: 'Periodic TLS 1.3 Malleable Beacon Heartbeats',
+            description: 'Statistical inter-arrival packet timing delta exhibits 1.2% jitter matching Cobalt Strike teamserver profile.',
+            impactScore: 96,
+            severity: 'critical' as const,
+            category: 'protocol_flaw' as const
+          },
+          {
+            id: 'iss-c2-2',
+            factor: 'Covert DNS TXT Exfiltration Tunnel',
+            description: 'Anomalous entropy Base64 TXT queries querying *.telemetry-sync.darkops.net on Port 53.',
+            impactScore: 91,
+            severity: 'critical' as const,
+            category: 'credential_leak' as const
+          }
+        ],
+        recommendedMitigations: [
+          'Terminate outbound TLS connection to 185.220.101.4:443',
+          'Block DNS TXT recursion queries on external zone',
+          'Isolate DB-02 from WAN egress gateway'
+        ]
+      };
+
+      activeCapture = {
+        id: `cap-${Date.now()}`,
+        fileName: preset.fileName,
+        fileType: 'pcap',
+        fileSize: 6430000,
+        packetCount: 18780,
+        flowCount: 120,
+        durationSeconds: 240,
+        protocolsDetected: ['TLS 1.3', 'HTTPS', 'DNS', 'TCP', 'UDP'],
+        threatNodesDetected: 2,
+        uploadedAt: new Date().toISOString()
+      };
+    } else if (preset.id === 'preset-enterprise-200mb') {
+      currentHosts = [
+        {
+          id: 'host-203-0-113-15',
+          name: 'EXT-APT29-C2',
+          ip: '203.0.113.15',
+          role: 'External APT Threat Actor / C2',
+          segment: 'dmz',
+          status: 'compromised',
+          x: 10,
+          y: 70,
+          openPorts: [80, 443],
+          attentionScore: 0.98,
+          os: 'Kali Linux 2024.1 Rolling',
+          inboundEdges: 0,
+          outboundEdges: 3
+        },
+        {
+          id: 'host-198-51-100-44',
+          name: 'EXT-DROP-EXFIL',
+          ip: '198.51.100.44',
+          role: 'External Ingress Drop / Exfil Standby',
+          segment: 'dmz',
+          status: 'compromised',
+          x: 10,
+          y: 25,
+          openPorts: [443],
+          attentionScore: 0.88,
+          os: 'Bulletproof Hardened C2',
+          inboundEdges: 1,
+          outboundEdges: 0
+        },
+        {
+          id: 'host-192-168-1-50',
+          name: 'DMZ-WEB01',
+          ip: '192.168.1.50',
+          role: 'DMZ Ingress Web Server / Targeted Pivot',
+          segment: 'corporate',
+          status: 'compromised',
+          x: 34,
+          y: 28,
+          openPorts: [80, 443, 8080],
+          attentionScore: 0.96,
+          os: 'Debian 12 Apache Gateway',
+          inboundEdges: 3,
+          outboundEdges: 0
+        },
+        {
+          id: 'host-192-168-1-1',
+          name: 'GW-CORE-01',
+          ip: '192.168.1.1',
+          role: 'Core Gateway & Router',
+          segment: 'corporate',
+          status: 'normal',
+          x: 34,
+          y: 72,
+          openPorts: [80, 123],
+          attentionScore: 0.35,
+          os: 'Cisco IOS-XE Core Switch',
+          inboundEdges: 3,
+          outboundEdges: 3
+        },
+        {
+          id: 'host-192-168-1-100',
+          name: 'SRV-DC01',
+          ip: '192.168.1.100',
+          role: 'Domain Controller / Kerberos',
+          segment: 'corporate',
+          status: 'targeted',
+          x: 60,
+          y: 18,
+          openPorts: [53, 88, 389, 445],
+          attentionScore: 0.88,
+          os: 'Windows Server 2022 Active Directory',
+          inboundEdges: 2,
+          outboundEdges: 1
+        },
+        {
+          id: 'host-192-168-1-105',
+          name: 'SRV-DB01',
+          ip: '192.168.1.105',
+          role: 'Production Financial Database',
+          segment: 'corporate',
+          status: 'elevated',
+          x: 60,
+          y: 50,
+          openPorts: [445, 1433, 5432],
+          attentionScore: 0.82,
+          os: 'Ubuntu 22.04 PostgreSQL Core',
+          inboundEdges: 1,
+          outboundEdges: 0
+        },
+        {
+          id: 'host-192-168-1-110',
+          name: 'SRV-FS01',
+          ip: '192.168.1.110',
+          role: 'Corporate File Server / Storage',
+          segment: 'corporate',
+          status: 'normal',
+          x: 60,
+          y: 82,
+          openPorts: [135, 445],
+          attentionScore: 0.38,
+          os: 'Windows Server 2019 SMB Share',
+          inboundEdges: 2,
+          outboundEdges: 1
+        },
+        {
+          id: 'host-192-168-1-120',
+          name: 'WS-ENG-01',
+          ip: '192.168.1.120',
+          role: 'Engineering Workstation 01',
+          segment: 'corporate',
+          status: 'normal',
+          x: 86,
+          y: 18,
+          openPorts: [22, 52100],
+          attentionScore: 0.32,
+          os: 'Ubuntu 24.04 LTS Desktop',
+          inboundEdges: 1,
+          outboundEdges: 1
+        },
+        {
+          id: 'host-192-168-1-130',
+          name: 'WS-EXEC-03',
+          ip: '192.168.1.130',
+          role: 'Executive VIP Laptop',
+          segment: 'corporate',
+          status: 'normal',
+          x: 86,
+          y: 50,
+          openPorts: [445, 49600],
+          attentionScore: 0.30,
+          os: 'Windows 11 Pro Enterprise',
+          inboundEdges: 1,
+          outboundEdges: 1
+        },
+        {
+          id: 'host-192-168-1-125',
+          name: 'WS-FIN-02',
+          ip: '192.168.1.125',
+          role: 'Finance Accounting Host',
+          segment: 'corporate',
+          status: 'normal',
+          x: 86,
+          y: 82,
+          openPorts: [445, 49180],
+          attentionScore: 0.36,
+          os: 'Windows 11 Pro Enterprise',
+          inboundEdges: 1,
+          outboundEdges: 2
+        }
+      ];
+
+      currentEdges = [
+        { id: 'e-ent-1', source: 'host-203-0-113-15', target: 'host-192-168-1-50', type: 'attack', weight: 0.98, port: 80, protocol: 'Weaponized Dropper Delivery (80)', attention: 0.98 },
+        { id: 'e-ent-2', source: 'host-203-0-113-15', target: 'host-192-168-1-50', type: 'attack', weight: 0.96, port: 443, protocol: 'TLS Staged Exploit Stream (443)', attention: 0.96 },
+        { id: 'e-ent-3', source: 'host-203-0-113-15', target: 'host-192-168-1-50', type: 'attack', weight: 0.94, port: 8080, protocol: 'Gateway CGI Exploit Probe (8080)', attention: 0.94 },
+        { id: 'e-ent-4', source: 'host-203-0-113-15', target: 'host-198-51-100-44', type: 'elevated', weight: 0.85, port: 443, protocol: 'C2 Standby Sync (443)', attention: 0.85 },
+        { id: 'e-ent-5', source: 'host-192-168-1-120', target: 'host-192-168-1-100', type: 'normal', weight: 0.32, port: 53, protocol: 'DNS Query / AD Auth (53)', attention: 0.32 },
+        { id: 'e-ent-6', source: 'host-192-168-1-125', target: 'host-192-168-1-110', type: 'normal', weight: 0.35, port: 445, protocol: 'SMB File Access (445)', attention: 0.35 },
+        { id: 'e-ent-7', source: 'host-192-168-1-130', target: 'host-192-168-1-110', type: 'normal', weight: 0.30, port: 445, protocol: 'SMB File Access (445)', attention: 0.30 },
+        { id: 'e-ent-8', source: 'host-192-168-1-125', target: 'host-192-168-1-105', type: 'normal', weight: 0.38, port: 5432, protocol: 'Routine SQL Query (5432)', attention: 0.38 },
+        { id: 'e-ent-9', source: 'host-192-168-1-1', target: 'host-192-168-1-120', type: 'normal', weight: 0.28, port: 80, protocol: 'Gateway Routing Keepalive', attention: 0.28 }
+      ];
+
+      customPredictedTarget = {
+        hostId: 'host-192-168-1-100',
+        name: 'SRV-DC01',
+        role: 'Domain Controller / Kerberos',
+        ip: '192.168.1.100',
+        segment: 'corporate' as const,
+        os: 'Windows Server 2022 Active Directory',
+        probabilityPercent: 95.4,
+        timeToAttackSeconds: 18.4,
+        timeToAttackLabel: '+18.4s',
+        predictedAttackVector: 'Imminent East-West Lateral Traversal & Kerberoasting (TA0008) targeting SRV-DC01:88 & SRV-DB01:445 upon DMZ gateway breach',
+        primarySourceId: 'host-203-0-113-15',
+        primarySourceName: 'EXT-APT29-C2',
+        incomingPort: 88,
+        protocol: 'Kerberos / TGS-REQ (88)',
+        mitreTactic: 'TA0001 (Initial Access) → TA0011 (Command & Control) → TA0008 (Lateral Movement)',
+        mitreTacticCode: 'TA0001 → TA0008',
+        probabilityIssues: [
+          {
+            id: 'iss-ent-1',
+            factor: 'Active Ingress Exploit Delivery on DMZ Gateway',
+            description: 'External APT threat actor (203.0.113.15) delivering multi-part weaponized binaries to Port 80/443.',
+            impactScore: 96,
+            severity: 'critical' as const,
+            category: 'protocol_flaw' as const
+          },
+          {
+            id: 'iss-ent-2',
+            factor: 'Projected East-West Hop to Active Directory',
+            description: 'World Model K=4 forward rollout predicts immediate Kerberoasting attempt on SRV-DC01 within 18.4s.',
+            impactScore: 93,
+            severity: 'critical' as const,
+            category: 'network_path' as const
+          },
+          {
+            id: 'iss-ent-3',
+            factor: 'High-Value Financial Target Exposure',
+            description: 'Production financial database (SRV-DB01) is reachable from the DMZ web server subnet.',
+            impactScore: 88,
+            severity: 'high' as const,
+            category: 'protocol_flaw' as const
+          }
+        ],
+        recommendedMitigations: [
+          'Quarantine DMZ-WEB01 (192.168.1.50) from internal corporate network',
+          'Deploy perimeter firewall ACL dropping ingress traffic from 203.0.113.15',
+          'Enforce strict zero-trust network policy restricting Port 88/445 access to DC'
+        ]
+      };
+
+      activeCapture = {
+        id: `cap-${Date.now()}`,
+        fileName: preset.fileName,
+        fileType: 'pcap',
+        fileSize: 209715584,
+        packetCount: 303535,
+        flowCount: 9009,
+        durationSeconds: 120,
+        protocolsDetected: ['SMB', 'PostgreSQL', 'Kerberos', 'TLS 1.3', 'DNS', 'HTTP'],
+        threatNodesDetected: 4,
+        uploadedAt: new Date().toISOString()
+      };
     } else {
       // APT29 default preset
       currentHosts = JSON.parse(JSON.stringify(INITIAL_HOSTS));
@@ -1334,6 +1610,7 @@ async function startServer() {
 
           const dynamicHosts: HostData[] = [];
           dmz.forEach((ip, idx) => {
+            const yPos = dmz.length === 1 ? 48 : (idx === 0 ? 25 : 70);
             dynamicHosts.push({
               id: `node-${ip.replace(/\./g, '-')}`,
               name: `EXT-${ip.split('.').pop()}`,
@@ -1341,8 +1618,8 @@ async function startServer() {
               role: 'Perimeter / External Actor',
               segment: 'dmz',
               status: 'compromised',
-              x: 10 + (idx % 2) * 14,
-              y: 25 + idx * 22,
+              x: 10,
+              y: yPos,
               openPorts: [80, 443, 8080],
               attentionScore: 0.94,
               os: 'External Host',
@@ -1352,6 +1629,23 @@ async function startServer() {
           });
 
           corp.forEach((ip, idx) => {
+            let col = 60;
+            let rowY = 50;
+            if (corp.length <= 3) {
+              col = 60;
+              rowY = [20, 50, 80][idx] ?? (20 + idx * 30);
+            } else {
+              const half = Math.ceil(corp.length / 2);
+              if (idx < half) {
+                col = 60;
+                rowY = half === 2 ? (idx === 0 ? 30 : 70) : (idx === 0 ? 20 : idx === 1 ? 50 : 80);
+              } else {
+                col = 86;
+                const subIdx = idx - half;
+                const totalInCol = corp.length - half;
+                rowY = totalInCol === 2 ? (subIdx === 0 ? 30 : 70) : (subIdx === 0 ? 20 : subIdx === 1 ? 50 : 80);
+              }
+            }
             dynamicHosts.push({
               id: `node-${ip.replace(/\./g, '-')}`,
               name: idx === 0 ? `SRV-${ip.split('.').pop()}` : `WS-${ip.split('.').pop()}`,
@@ -1359,8 +1653,8 @@ async function startServer() {
               role: idx === 0 ? 'Domain Controller / Primary Identity' : `Internal Host ${idx}`,
               segment: 'corporate',
               status: idx === 0 ? 'targeted' : 'normal',
-              x: 45 + (idx % 3) * 16,
-              y: 20 + idx * 20,
+              x: col,
+              y: rowY,
               openPorts: idx === 0 ? [445, 135, 3389] : [445, 80],
               attentionScore: idx === 0 ? 0.92 : 0.42,
               os: idx === 0 ? 'Windows Server 2022' : 'Enterprise Endpoint',
@@ -1552,10 +1846,10 @@ async function startServer() {
     }
   });
 
-  // API Route: Reset Capture back to live stream
+  // API Route: Reset Capture — clears all state, returns to upload-required state
   const handleFullPipelineReset = (req: express.Request, res: express.Response) => {
-    currentHosts = JSON.parse(JSON.stringify(INITIAL_HOSTS));
-    currentEdges = JSON.parse(JSON.stringify(INITIAL_EDGES));
+    currentHosts = [];
+    currentEdges = [];
     isolatedHostIds = [];
     blockedPorts = {};
     activeCapture = null;
@@ -1563,7 +1857,7 @@ async function startServer() {
     customTelemetry = null;
     customForecastPoints = null;
     customAlerts = null;
-    windowSeq = 842;
+    windowSeq = 0;
 
     console.log('[PIPELINE] Global Pipeline Reset executed. Cleared active models, stream buffers & restored ground-truth topology.');
 
@@ -1580,16 +1874,35 @@ async function startServer() {
 
   // API Route: Sensor Telemetry
   app.get('/api/telemetry', (req, res) => {
+    if (!activeCapture) {
+      return res.json({
+        noDataUploaded: true,
+        infiltrationRisk: 0,
+        riskTrend: '0',
+        leadTime: '—',
+        leadTimeDelta: '—',
+        predictedStage: '—',
+        mitreTactic: '—',
+        modelConfidence: 0,
+        uncertainty: 0,
+        portEntropy: 0,
+        synRatio: 0,
+        logByteVolume: 0
+      });
+    }
     if (customTelemetry) {
       return res.json(customTelemetry);
     }
     const predicted = computeNextPredictedTarget();
+    if (!predicted) {
+      return res.json({ noDataUploaded: true, infiltrationRisk: 0 });
+    }
     res.json({
       infiltrationRisk: Math.round(predicted.probabilityPercent),
       riskTrend: predicted.probabilityPercent > 70 ? '12' : '0',
       leadTime: predicted.timeToAttackLabel,
       leadTimeDelta: '+3.2s',
-      predictedStage: predicted.probabilityPercent > 70 ? 'Lateral movement' : 'Mitigated / Monitored',
+      predictedStage: predicted.probabilityPercent > 70 ? 'Lateral Movement' : 'Mitigated / Monitored',
       mitreTactic: predicted.mitreTactic,
       modelConfidence: 94.2,
       uncertainty: 5.8,
@@ -1719,6 +2032,9 @@ async function startServer() {
 
   // API Route: Get Simulations History
   app.get('/api/simulations', (req, res) => {
+    if (!activeCapture) {
+      return res.json([]);
+    }
     res.json(simulationRecords);
   });
 
@@ -1748,23 +2064,9 @@ async function startServer() {
   app.post('/api/actions/reset', (req, res) => {
     isolatedHostIds = [];
     blockedPorts = {};
-    windowSeq = 842;
+    windowSeq = 1;
     customPredictedTarget = null;
-    simulationRecords = [
-      {
-        id: 'sim-init-1',
-        actionType: 'isolate_host',
-        actionLabel: 'Isolate APP-07 (Gateway)',
-        targetId: 'app-07',
-        targetLabel: 'APP-07 (10.0.0.22)',
-        port: undefined,
-        timeAgo: 'Just now',
-        initialRisk: 94,
-        simulatedRisk: 12,
-        delta: 82,
-        timestamp: Date.now() - 60000
-      }
-    ];
+    simulationRecords = [];
     res.json({
       success: true,
       message: 'Network simulation reset to baseline'
@@ -1773,7 +2075,22 @@ async function startServer() {
 
   // API Route: Dynamic Attack Trajectory Forecast & Kill Chain
   app.get('/api/forecast', (req, res) => {
+    if (!activeCapture) {
+      return res.json({
+        noDataUploaded: true,
+        points: [],
+        killChainStages: [],
+        portEntropy: 0,
+        synRatio: 0,
+        logByteVolume: 0,
+        currentRisk: 0,
+        isMitigated: false
+      });
+    }
     const predicted = computeNextPredictedTarget();
+    if (!predicted) {
+      return res.json({ noDataUploaded: true, points: [], killChainStages: [] });
+    }
     const risk = Math.round(predicted.probabilityPercent);
     const isMitigated = isolatedHostIds.length > 0 || Object.keys(blockedPorts).some(k => (blockedPorts[k] || []).length > 0);
 
@@ -1794,19 +2111,19 @@ async function startServer() {
 
     const killChainStages = [
       { step: 1, name: 'Reconnaissance', status: 'completed' as const, tacticId: 'TA0043' },
-      { step: 2, name: 'Weaponization', status: 'completed' as const, tacticId: 'TA0042' },
-      { step: 3, name: 'Delivery & Exploit', status: 'completed' as const, tacticId: 'TA0001' },
+      { step: 2, name: 'Resource Development', status: 'completed' as const, tacticId: 'TA0042' },
+      { step: 3, name: 'Initial Access', status: 'completed' as const, tacticId: 'TA0001' },
       {
         step: 4,
-        name: 'Lateral Movement',
+        name: 'Execution & C2',
         status: isMitigated ? ('completed' as const) : risk > 50 ? ('active' as const) : ('upcoming' as const),
-        tacticId: predicted.mitreTacticCode || 'TA0008'
+        tacticId: 'TA0002 / TA0011'
       },
       {
         step: 5,
-        name: 'Target Action / Infiltration',
+        name: 'Lateral Movement',
         status: isMitigated ? ('upcoming' as const) : risk > 80 ? ('active' as const) : ('upcoming' as const),
-        tacticId: 'TA0040'
+        tacticId: 'TA0008'
       }
     ];
 
@@ -1823,11 +2140,23 @@ async function startServer() {
 
   // API Route: Dynamic GNN Explainability & Feature Attributions
   app.get('/api/explainability', (req, res) => {
+    if (!activeCapture || currentEdges.length === 0) {
+      return res.json({
+        noDataUploaded: true,
+        features: []
+      });
+    }
     const edgeId = req.query.edgeId as string;
-    const edge = currentEdges.find((e) => e.id === edgeId) || currentEdges[1] || currentEdges[0];
+    const edge = currentEdges.find((e) => e.id === edgeId) || currentEdges[0];
+    if (!edge) {
+      return res.json({ noDataUploaded: true, features: [] });
+    }
     const sourceHost = currentHosts.find((h) => h.id === edge.source) || currentHosts[0];
     const targetHost = currentHosts.find((h) => h.id === edge.target) || currentHosts[1] || currentHosts[0];
     const predicted = computeNextPredictedTarget();
+    if (!sourceHost || !targetHost || !predicted) {
+      return res.json({ noDataUploaded: true, features: [] });
+    }
 
     const isAttack = edge.type === 'attack';
     const features = [
@@ -1889,6 +2218,9 @@ async function startServer() {
 
   // API Route: Dynamic Alerts Feed from Backend State
   app.get('/api/alerts', (req, res) => {
+    if (!activeCapture) {
+      return res.json([]);
+    }
     if (customAlerts && Array.isArray(customAlerts) && customAlerts.length > 0) {
       return res.json(customAlerts);
     }
@@ -1944,12 +2276,18 @@ async function startServer() {
   // Vite middleware for development or static serving for production
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, allowedHosts: true },
       appType: 'spa'
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = fs.existsSync(path.join(__dirname, 'index.html'))
+      ? __dirname
+      : (fs.existsSync(path.join(process.cwd(), 'dist', 'index.html'))
+        ? path.join(process.cwd(), 'dist')
+        : (fs.existsSync(path.join(process.cwd(), 'frontend', 'dist', 'index.html'))
+          ? path.join(process.cwd(), 'frontend', 'dist')
+          : path.join(__dirname, '..', 'dist')));
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

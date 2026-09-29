@@ -453,10 +453,10 @@ export const getExplainabilityForSource = (sourceHostId: string): SourceExplaina
 
 export const KILL_CHAIN_STAGES: KillChainStage[] = [
   { step: 1, name: 'Reconnaissance', status: 'completed', tacticId: 'TA0043' },
-  { step: 2, name: 'Weaponization', status: 'completed', tacticId: 'TA0042' },
-  { step: 3, name: 'Delivery & Exploit', status: 'completed', tacticId: 'TA0001' },
-  { step: 4, name: 'Lateral Movement', status: 'active', tacticId: 'TA0008' },
-  { step: 5, name: 'Target Action / Infiltration', status: 'upcoming', tacticId: 'TA0040' }
+  { step: 2, name: 'Resource Development', status: 'completed', tacticId: 'TA0042' },
+  { step: 3, name: 'Initial Access', status: 'completed', tacticId: 'TA0001' },
+  { step: 4, name: 'Execution & C2', status: 'active', tacticId: 'TA0002 / TA0011' },
+  { step: 5, name: 'Lateral Movement', status: 'upcoming', tacticId: 'TA0008' }
 ];
 
 export const INITIAL_ALERTS: TelemetryAlert[] = [

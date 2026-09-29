@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { SlidersHorizontal, Search, ShieldAlert, Server, Laptop, Database, Globe, Lock, ShieldCheck, X } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { SlidersHorizontal, Search, ShieldAlert, Server, Laptop, Database, Globe, Lock, ShieldCheck, X, RotateCcw, Move, Sparkles } from 'lucide-react';
 import { NetworkHost, NetworkEdge, AppTheme } from '../types';
 import { playCyberTone } from '../utils/audio';
 
@@ -34,6 +34,18 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
   const [filterType, setFilterType] = useState<'all' | 'high_attention' | 'corporate' | 'dmz'>('all');
   const [showInspector, setShowInspector] = useState(false);
 
+  // Drag-and-drop interactive repositioning state
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const hasDraggedRef = useRef<boolean>(false);
+  const [customCoords, setCustomCoords] = useState<{ [id: string]: { x: number; y: number } }>({});
+  const [dragState, setDragState] = useState<{
+    id: string;
+    startClientX: number;
+    startClientY: number;
+    startNodeX: number;
+    startNodeY: number;
+  } | null>(null);
+
   const isLight = theme === 'light';
   const isMidnight = theme === 'midnight';
 
@@ -54,36 +66,88 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
   const selectedHost = hosts.find((h) => h.id === selectedHostId) || hosts[0];
 
   const getNodeIcon = (host: NetworkHost) => {
-    if (host.id === 'c2-ext') return <Globe className="w-4 h-4 text-rose-500" />;
-    if (host.id.includes('db')) return <Database className="w-4 h-4 text-cyan-500" />;
-    if (host.id.includes('srv')) return <Server className="w-4 h-4 text-cyan-500" />;
+    if (host.id === 'c2-ext' || host.id.includes('c2') || host.role.toLowerCase().includes('threat') || host.role.toLowerCase().includes('c2')) {
+      return <Globe className="w-4 h-4 text-rose-500" />;
+    }
+    if (host.id.includes('db') || host.role.toLowerCase().includes('database')) {
+      return <Database className="w-4 h-4 text-cyan-500" />;
+    }
+    if (host.id.includes('srv') || host.id.includes('dc') || host.id.includes('gw') || host.role.toLowerCase().includes('server') || host.role.toLowerCase().includes('gateway')) {
+      return <Server className="w-4 h-4 text-cyan-500" />;
+    }
     return <Laptop className="w-4 h-4 text-cyan-500" />;
   };
 
-  // Node coordinate mapping in SVG viewbox (800x420) - spaced generously
-  const nodeCoords: { [id: string]: { x: number; y: number } } = {
-    'ws-042': { x: 140, y: 260 },
-    'srv-dc01': { x: 330, y: 110 },
-    'app-07': { x: 490, y: 270 },
-    'db-02': { x: 620, y: 110 },
-    'c2-ext': { x: 720, y: 290 }
-  };
-
+  // Node coordinate calculation over expansive 1160 x 580 canvas
   const getNodeCoords = (hostId: string): { x: number; y: number } => {
-    if (nodeCoords[hostId]) return nodeCoords[hostId];
+    // 1. User manual drag override
+    if (customCoords[hostId]) return customCoords[hostId];
+
     const host = hosts.find((h) => h.id === hostId);
+
+    // 2. Proportional layout scaling across 1160 x 580 canvas
     if (host && typeof host.x === 'number' && typeof host.y === 'number') {
-      const x = Math.round((host.x / 100) * 620 + 90);
-      const y = Math.round((host.y / 100) * 260 + 80);
+      const x = Math.round(90 + (host.x / 100) * 980);
+      const y = Math.round(65 + (host.y / 100) * 450);
       return { x, y };
     }
+
+    // 3. Fallback: Zone-based distribution
     const idx = hosts.findIndex((h) => h.id === hostId);
     if (idx >= 0 && hosts.length > 0) {
-      const x = Math.round(120 + (idx / Math.max(1, hosts.length - 1)) * 560);
-      const y = idx % 2 === 0 ? 120 : 270;
+      const isExt = host?.segment === 'dmz' || host?.role.toLowerCase().includes('external') || host?.role.toLowerCase().includes('c2');
+      const col = isExt ? (idx % 2) : 2 + (idx % 2);
+      const row = Math.floor(idx / 2);
+      const x = Math.round(180 + col * 260);
+      const y = Math.round(140 + row * 130);
       return { x, y };
     }
-    return { x: 400, y: 200 };
+    return { x: 580, y: 290 };
+  };
+
+  const handleMouseDownNode = (e: React.MouseEvent, hostId: string) => {
+    e.stopPropagation();
+    hasDraggedRef.current = false;
+    const current = getNodeCoords(hostId);
+    setDragState({
+      id: hostId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startNodeX: current.x,
+      startNodeY: current.y
+    });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragState || !svgRef.current) return;
+    const dist = Math.hypot(e.clientX - dragState.startClientX, e.clientY - dragState.startClientY);
+    if (dist > 4) {
+      hasDraggedRef.current = true;
+    }
+    const rect = svgRef.current.getBoundingClientRect();
+    const scaleX = 1160 / rect.width;
+    const scaleY = 580 / rect.height;
+    const dx = (e.clientX - dragState.startClientX) * scaleX;
+    const dy = (e.clientY - dragState.startClientY) * scaleY;
+
+    const newX = Math.max(70, Math.min(1090, Math.round(dragState.startNodeX + dx)));
+    const newY = Math.max(50, Math.min(530, Math.round(dragState.startNodeY + dy)));
+
+    setCustomCoords((prev) => ({
+      ...prev,
+      [dragState.id]: { x: newX, y: newY }
+    }));
+  };
+
+  const handleMouseUp = () => {
+    if (dragState) {
+      setDragState(null);
+    }
+  };
+
+  const handleResetLayout = () => {
+    if (soundEnabled) playCyberTone('click');
+    setCustomCoords({});
   };
 
   const getFriendlyHostInfo = (host: NetworkHost) => {
@@ -101,7 +165,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
     const riskPercent = Math.round((host.attentionScore || (isTgt ? 0.85 : isComp ? 0.9 : 0.3)) * 100);
 
     return {
-      title: `${host.name} (${host.role})`,
+      title: host.name,
+      role: host.role,
       roleDesc: `${host.role} · OS: ${host.os} · Open Ports: [${(host.openPorts || []).join(', ') || 'None'}] · Attention: ${riskPercent}%`,
       status: isC2Node || isComp
         ? '🔴 INFECTED / BREACHED'
@@ -161,6 +226,18 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
             ATTENTION 0.92
           </div>
           <button
+            onClick={handleResetLayout}
+            title="Reset to default spacious layout"
+            className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded border text-xs font-mono transition-colors ${
+              isLight
+                ? 'border-slate-300 bg-white text-slate-700 hover:text-slate-900 shadow-xs'
+                : 'border-slate-700 bg-slate-800 text-slate-300 hover:text-white'
+            }`}
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-cyan-500" />
+            <span className="hidden sm:inline">Auto Space</span>
+          </button>
+          <button
             onClick={() => {
               if (soundEnabled) playCyberTone('click');
               setFilterType((prev) => (prev === 'all' ? 'high_attention' : 'all'));
@@ -198,7 +275,10 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
           />
         </div>
 
-        <div className="flex items-center space-x-4 text-[11px]">
+        <div className="flex flex-wrap items-center gap-4 text-[11px]">
+          <span className="hidden md:inline-flex text-[10px] text-slate-400 font-sans items-center gap-1">
+            <Move className="w-3 h-3 text-cyan-500" /> Drag any computer to reposition
+          </span>
           <span className="flex items-center space-x-1.5">
             <span className="w-2 h-2 rounded-xs bg-rose-500" />
             <span>{hosts.length} active hosts</span>
@@ -210,24 +290,21 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
         </div>
       </div>
 
-      {/* Segment labels */}
-      <div className={`flex justify-between px-5 pt-2 text-[10px] font-mono tracking-widest select-none ${
-        isLight ? 'text-slate-500' : 'text-slate-400'
-      }`}>
-        <div>| CORPORATE SEGMENT</div>
-        <div>| DMZ / EDGE</div>
-      </div>
-
-      {/* Interactive Topology Graph Canvas / SVG (Adaptive Responsive Height) */}
-      <div className={`relative w-full h-[320px] sm:h-[400px] lg:h-[460px] cyber-grid overflow-hidden ${
-        isLight ? 'bg-slate-50/70' : isMidnight ? 'bg-[#040b18]' : 'bg-[#0f172a]/90'
-      }`}>
-        {/* Subtle background segment dividing line */}
-        <div className={`absolute top-0 bottom-0 left-[68%] border-l border-dashed pointer-events-none opacity-60 ${
-          isLight ? 'border-slate-300' : 'border-slate-700'
-        }`} />
-
-        <svg className="w-full h-full" viewBox="0 0 800 420" preserveAspectRatio="xMidYMid meet">
+      {/* Interactive Topology Graph Canvas / SVG (Expansive View with Space) */}
+      <div 
+        className={`relative w-full h-[460px] sm:h-[540px] lg:h-[620px] cyber-grid overflow-hidden select-none ${
+          isLight ? 'bg-slate-50/70' : isMidnight ? 'bg-[#040b18]' : 'bg-[#0f172a]/90'
+        }`}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        <svg 
+          ref={svgRef}
+          className="w-full h-full" 
+          viewBox="0 0 1160 580" 
+          preserveAspectRatio="xMidYMid meet"
+        >
           <defs>
             {/* Glow filters */}
             <filter id="cyanGlow" x="-20%" y="-20%" width="140%" height="140%">
@@ -243,6 +320,33 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
               <stop offset="100%" stopColor="#fb7185" />
             </linearGradient>
           </defs>
+
+          {/* Background Zone Demarcation Columns (Spacious & Clean) */}
+          <g className="opacity-45 pointer-events-none">
+            {/* Zone 1: Ingress / External */}
+            <rect x="25" y="16" width="280" height="548" rx="8" fill={isLight ? '#f1f5f9' : '#071020'} stroke={isLight ? '#cbd5e1' : '#1e293b'} strokeWidth="1" strokeDasharray="5,5" />
+            <text x="40" y="38" fill={isLight ? '#64748b' : '#64748b'} fontSize="9.5" fontWeight="bold" fontFamily="monospace" letterSpacing="1.5">
+              ZONE 01: EXTERNAL VECTOR / C2
+            </text>
+
+            {/* Zone 2: DMZ & Gateway */}
+            <rect x="325" y="16" width="240" height="548" rx="8" fill={isLight ? '#f1f5f9' : '#071020'} stroke={isLight ? '#cbd5e1' : '#1e293b'} strokeWidth="1" strokeDasharray="5,5" />
+            <text x="340" y="38" fill={isLight ? '#64748b' : '#64748b'} fontSize="9.5" fontWeight="bold" fontFamily="monospace" letterSpacing="1.5">
+              ZONE 02: DMZ & PERIMETER
+            </text>
+
+            {/* Zone 3: Enterprise Servers */}
+            <rect x="585" y="16" width="260" height="548" rx="8" fill={isLight ? '#f1f5f9' : '#071020'} stroke={isLight ? '#cbd5e1' : '#1e293b'} strokeWidth="1" strokeDasharray="5,5" />
+            <text x="600" y="38" fill={isLight ? '#64748b' : '#64748b'} fontSize="9.5" fontWeight="bold" fontFamily="monospace" letterSpacing="1.5">
+              ZONE 03: CORE IDENTITY & DATA
+            </text>
+
+            {/* Zone 4: Workstations */}
+            <rect x="865" y="16" width="270" height="548" rx="8" fill={isLight ? '#f1f5f9' : '#071020'} stroke={isLight ? '#cbd5e1' : '#1e293b'} strokeWidth="1" strokeDasharray="5,5" />
+            <text x="880" y="38" fill={isLight ? '#64748b' : '#64748b'} fontSize="9.5" fontWeight="bold" fontFamily="monospace" letterSpacing="1.5">
+              ZONE 04: CLIENT WORKSTATIONS
+            </text>
+          </g>
 
           {/* Render Edges */}
           {edges.map((edge) => {
@@ -337,42 +441,31 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
                   className={!isBlocked && isAttack ? 'animate-pulse' : ''}
                 />
 
-                {/* Direction arrow / indicator near target */}
-                <circle
-                  cx={src.x * 0.35 + tgt.x * 0.65}
-                  cy={src.y * 0.35 + tgt.y * 0.65}
-                  r={isSelected ? 3.5 : 2.5}
-                  fill={strokeColor}
-                  className="animate-ping opacity-60"
-                  style={{ animationDuration: '3s' }}
-                />
-
-                {/* Edge label pill */}
-                {isSelected && (
+                {/* Edge port indicator pill on line */}
+                <g transform={`translate(${midX}, ${midY})`}>
                   <rect
-                    x={midX - 35}
-                    y={midY - 18}
-                    width={70}
-                    height={15}
-                    rx={3}
-                    fill={isLight ? '#ffffff' : '#0f172a'}
-                    stroke="#06b6d4"
-                    strokeWidth={1}
+                    x={-28}
+                    y={-9}
+                    width={56}
+                    height={18}
+                    rx={4}
+                    fill={isLight ? '#ffffff' : '#071329'}
+                    stroke={isSelected ? '#06b6d4' : isAttack ? '#f43f5e' : (isLight ? '#cbd5e1' : '#1e293b')}
+                    strokeWidth={isSelected ? 1.8 : 1}
+                    className="shadow-sm"
                   />
-                )}
-                {isSelected && (
                   <text
-                    x={midX}
-                    y={midY - 7}
+                    x={0}
+                    y={3.5}
                     textAnchor="middle"
-                    fill={isLight ? '#0284c7' : '#38bdf8'}
-                    fontSize="9"
+                    fill={isSelected ? '#06b6d4' : isAttack ? '#f43f5e' : (isLight ? '#475569' : '#94a3b8')}
+                    fontSize="8.5"
                     fontWeight="bold"
                     fontFamily="monospace"
                   >
-                    PORT {edge.port}
+                    :{edge.port}
                   </text>
-                )}
+                </g>
               </g>
             );
           })}
@@ -388,7 +481,8 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
             const isC2 = host.id === 'c2-ext' || host.role?.toLowerCase().includes('adversary') || host.role?.toLowerCase().includes('attacker') || host.id.includes('c2') || host.id.includes('expl');
             const isTarget = host.status === 'targeted' || host.id === 'srv-dc01';
             const isCompromised = host.status === 'compromised';
-            const friendly = getFriendlyHostInfo(host);
+            const isElevated = host.status === 'elevated';
+            const riskPercent = Math.round((host.attentionScore || (isTarget ? 0.85 : isCompromised ? 0.90 : isElevated ? 0.65 : 0.20)) * 100);
 
             const opacity = isMatching ? 1 : 0.3;
 
@@ -397,21 +491,23 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
                 key={host.id}
                 transform={`translate(${coords.x}, ${coords.y})`}
                 opacity={opacity}
+                onMouseDown={(e) => handleMouseDownNode(e, host.id)}
                 onClick={() => {
+                  if (hasDraggedRef.current) return;
                   if (soundEnabled) playCyberTone('click');
                   onSelectHost(host.id);
                   setShowInspector(true);
                 }}
-                className="cursor-pointer transition-transform duration-200 hover:scale-105"
+                className="cursor-grab active:cursor-grabbing transition-transform duration-150 hover:scale-105"
               >
                 {/* Outer selection ring / glow */}
                 {isSelected && (
                   <rect
-                    x={-68}
-                    y={-38}
-                    width={136}
-                    height={76}
-                    rx={10}
+                    x={-83}
+                    y={-41}
+                    width={166}
+                    height={82}
+                    rx={12}
                     fill="none"
                     stroke={isC2 ? '#f43f5e' : isTarget ? '#fbbf24' : '#06b6d4'}
                     strokeWidth={2}
@@ -422,11 +518,11 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
 
                 {/* Node box container */}
                 <rect
-                  x={-62}
-                  y={-32}
-                  width={124}
-                  height={64}
-                  rx={8}
+                  x={-77}
+                  y={-35}
+                  width={154}
+                  height={70}
+                  rx={10}
                   fill={nodeBoxFill(isIsolated, isC2, isCompromised, isTarget)}
                   stroke={
                     isIsolated
@@ -446,11 +542,11 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
 
                 {/* Left Mini icon box */}
                 <rect
-                  x={-54}
-                  y={-22}
-                  width={22}
-                  height={22}
-                  rx={5}
+                  x={-69}
+                  y={-25}
+                  width={26}
+                  height={26}
+                  rx={6}
                   fill={
                     isIsolated
                       ? (isLight ? '#e2e8f0' : '#1f2937')
@@ -467,7 +563,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
                 />
 
                 {/* Host icon render inside mini box */}
-                <g transform="translate(-52, -20) scale(0.75)">
+                <g transform="translate(-66, -22) scale(0.8)">
                   {isIsolated ? (
                     <Lock className="w-5 h-5 text-slate-400" />
                   ) : (
@@ -475,9 +571,9 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
                   )}
                 </g>
 
-                {/* Friendly Role Header */}
+                {/* Host Name Header */}
                 <text
-                  x={-24}
+                  x={-34}
                   y={-14}
                   fill={
                     isIsolated
@@ -490,16 +586,16 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
                       ? '#e11d48'
                       : (isLight ? '#0f172a' : '#ffffff')
                   }
-                  fontSize="9.5"
+                  fontSize="10"
                   fontWeight="bold"
                   fontFamily="sans-serif"
                 >
-                  {friendly.title.length > 17 ? friendly.title.substring(0, 16) + '..' : friendly.title}
+                  {host.name.length > 16 ? host.name.substring(0, 15) + '…' : host.name}
                 </text>
 
-                {/* Host Name / ID */}
+                {/* Host IP in crisp monospace */}
                 <text
-                  x={-24}
+                  x={-34}
                   y={-1}
                   fill={
                     isIsolated
@@ -513,19 +609,19 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
                       : (isLight ? '#0369a1' : '#38bdf8')
                   }
                   fontSize="8.5"
-                  fontWeight="bold"
+                  fontWeight="600"
                   fontFamily="monospace"
                 >
-                  {host.name} ({host.ip.split('.').slice(-2).join('.')})
+                  {host.ip}
                 </text>
 
                 {/* Status pill badge on node */}
                 <rect
-                  x={-54}
-                  y={12}
-                  width={108}
+                  x={-69}
+                  y={13}
+                  width={138}
                   height={15}
-                  rx={3}
+                  rx={3.5}
                   fill={
                     isIsolated
                       ? (isLight ? '#e2e8f0' : '#1e293b')
@@ -549,7 +645,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
 
                 <text
                   x={0}
-                  y={23}
+                  y={23.5}
                   fill={
                     isIsolated
                       ? (isLight ? '#475569' : '#94a3b8')
@@ -565,12 +661,14 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
                   textAnchor="middle"
                 >
                   {isIsolated
-                    ? '🛡️ UNPLUGGED'
+                    ? '🛡️ ISOLATED'
                     : isCompromised
-                    ? '🔴 INFECTED'
+                    ? '🔴 COMPROMISED'
                     : isTarget
-                    ? '⚠️ IN DANGER (94%)'
-                    : '🟢 SAFE'}
+                    ? `⚠️ TARGETED (${riskPercent}%)`
+                    : isElevated
+                    ? `⚡ ELEVATED (${riskPercent}%)`
+                    : '🟢 NORMAL'}
                 </text>
               </g>
             );
@@ -591,7 +689,7 @@ export const TopologyGraph: React.FC<TopologyGraphProps> = ({
                   {getFriendlyHostInfo(selectedHost).title}
                 </h4>
                 <span className="text-[11px] font-mono text-slate-400">
-                  {selectedHost.name} · IP: {selectedHost.ip}
+                  {selectedHost.role} · IP: {selectedHost.ip}
                 </span>
               </div>
               <button

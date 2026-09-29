@@ -59,6 +59,119 @@ interface MainThreatTopologyViewProps {
 
 type ViewMode = 'map' | 'target' | 'attacked' | 'guide' | 'split';
 
+export const resolveAttackClassification = (vector?: string, tactic?: string) => {
+  const raw = `${vector || ''} ${tactic || ''}`.toLowerCase();
+
+  // Official MITRE ATT&CK Tactics & Techniques
+  // Each entry uses the official tactic name + technique ID from https://attack.mitre.org
+
+  // Execution / Exploitation of Remote Services (T1210) — EternalBlue, DoublePulsar, RCE
+  if (raw.includes('eternalblue') || raw.includes('doublepulsar') || raw.includes('ms17-010') || raw.includes('buffer overflow') || raw.includes('stack overflow') || raw.includes('ring0') || raw.includes('t1210')) {
+    return {
+      type: 'Exploit Public-Facing Application',
+      category: 'Initial Access · T1190',
+      tacticId: 'TA0001',
+      mitreId: 'T1190',
+      badgeColor: 'rose',
+      isBinaryExploit: true
+    };
+  }
+  // Ingress Tool Transfer / Staged Payload Delivery (T1105)
+  if (raw.includes('weapon') || raw.includes('delivery') || raw.includes('dropper') || raw.includes('staging')) {
+    return {
+      type: 'Ingress Tool Transfer',
+      category: 'Command & Control · T1105',
+      tacticId: 'TA0011',
+      mitreId: 'T1105',
+      badgeColor: 'rose',
+      isBinaryExploit: true
+    };
+  }
+  // Lateral Tool Transfer / Remote Services (T1021) — SMB, PsExec
+  if (raw.includes('psexec') || (raw.includes('smb') && raw.includes('lateral')) || raw.includes('t1021')) {
+    return {
+      type: 'Remote Services (SMB/PsExec)',
+      category: 'Lateral Movement · T1021',
+      tacticId: 'TA0008',
+      mitreId: 'T1021',
+      badgeColor: 'rose',
+      isBinaryExploit: false
+    };
+  }
+  // Exploit Public-Facing Application — SQLi / Database (T1190)
+  if (raw.includes('sql') || raw.includes('sqli') || raw.includes('postgres') || raw.includes('5432') || raw.includes('t1190')) {
+    return {
+      type: 'Exploit Public-Facing Application',
+      category: 'Initial Access · T1190',
+      tacticId: 'TA0001',
+      mitreId: 'T1190',
+      badgeColor: 'amber',
+      isBinaryExploit: false
+    };
+  }
+  // Network Denial of Service — Modbus / SCADA coil manipulation (T1565.003)
+  if (raw.includes('modbus') || raw.includes('scada') || raw.includes('plc') || raw.includes('coil') || raw.includes('502')) {
+    return {
+      type: 'Runtime Data Manipulation (OT/ICS)',
+      category: 'Impact · T1565.003',
+      tacticId: 'TA0040',
+      mitreId: 'T1565.003',
+      badgeColor: 'purple',
+      isBinaryExploit: false
+    };
+  }
+  // Application Layer Protocol / C2 Beaconing (T1071.001)
+  if (raw.includes('beacon') || raw.includes('c2') || raw.includes('cobalt') || raw.includes('tunnel') || raw.includes('t1071')) {
+    return {
+      type: 'Application Layer Protocol (Web/HTTPS C2)',
+      category: 'Command & Control · T1071.001',
+      tacticId: 'TA0011',
+      mitreId: 'T1071.001',
+      badgeColor: 'indigo',
+      isBinaryExploit: false
+    };
+  }
+  // Network Denial of Service — SYN Flood / DDoS (T1498)
+  if (raw.includes('syn') || raw.includes('flood') || raw.includes('ddos') || raw.includes('dos') || raw.includes('t1498')) {
+    return {
+      type: 'Network Denial of Service',
+      category: 'Impact · T1498',
+      tacticId: 'TA0040',
+      mitreId: 'T1498',
+      badgeColor: 'rose',
+      isBinaryExploit: false
+    };
+  }
+  // Brute Force / Kerberoasting — Credential Access (T1558.003)
+  if (raw.includes('kerberos') || raw.includes('kerberoast') || raw.includes('patator') || raw.includes('brute') || raw.includes('credential')) {
+    return {
+      type: 'Steal or Forge Kerberos Tickets (Kerberoasting)',
+      category: 'Credential Access · T1558.003',
+      tacticId: 'TA0006',
+      mitreId: 'T1558.003',
+      badgeColor: 'amber',
+      isBinaryExploit: false
+    };
+  }
+  if (raw.includes('benign') || raw.includes('routine') || raw.includes('normal')) {
+    return {
+      type: 'Benign / Routine Enterprise Operations (No Active Exploit)',
+      category: 'Normal Traffic',
+      badgeColor: 'emerald',
+      isBinaryExploit: false
+    };
+  }
+  // Default: Lateral Movement / Remote Service Exploitation (T1570)
+  return {
+    type: vector || 'Lateral Tool Transfer',
+    category: 'Lateral Movement · T1570',
+    tacticId: 'TA0008',
+    mitreId: 'T1570',
+    badgeColor: 'amber',
+    isBinaryExploit: false
+  };
+};
+
 export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
   hosts,
   edges,
@@ -119,6 +232,11 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
   const timeToAttack = predictedNextTarget?.timeToAttackLabel || '+18.0s';
   const targetProtocol = predictedNextTarget?.protocol || 'Network Service';
 
+  const attackClassification = resolveAttackClassification(
+    predictedNextTarget?.predictedAttackVector,
+    predictedNextTarget?.mitreTactic
+  );
+
   return (
     <div className="space-y-6">
       {/* 1. TOP UTILITY BAR: Capture info + sync (Consistent across all pages) */}
@@ -145,7 +263,7 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           {/* Left: Plain English Story */}
           <div className="space-y-4 max-w-3xl">
-            <div className="flex items-center space-x-3">
+            <div className="flex flex-wrap items-center gap-3">
               <span className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold font-mono tracking-wide border ${
                 isLight
                   ? 'bg-rose-100 border-rose-300 text-rose-800'
@@ -156,6 +274,46 @@ export const MainThreatTopologyView: React.FC<MainThreatTopologyViewProps> = ({
               </span>
               <span className={`text-xs font-mono ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                 Predicted attack in <strong className={isLight ? 'text-amber-700 font-bold' : 'text-amber-300 font-bold'}>{timeToAttack}</strong>
+              </span>
+            </div>
+
+            {/* Prominent High-Visibility ATTACK TYPE Badge — Official MITRE ATT&CK Tactic & Technique */}
+            <div className="flex flex-wrap items-center gap-2.5 pt-1">
+              <span className={`px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center space-x-2 border shadow-md transition-all ${
+                isLight
+                  ? 'bg-rose-600 text-white border-rose-700 shadow-rose-600/20'
+                  : 'bg-rose-600/90 text-white border-rose-400/60 shadow-[0_0_15px_rgba(244,63,94,0.3)]'
+              }`}>
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                </span>
+                <span className="font-mono text-[11px] sm:text-xs tracking-wider uppercase font-bold text-rose-100">
+                  MITRE ATT&amp;CK TECHNIQUE:
+                </span>
+                <span className="text-xs sm:text-sm md:text-base font-sans font-extrabold tracking-normal text-white">
+                  {attackClassification.type}
+                </span>
+              </span>
+
+              {/* Official MITRE ATT&CK Tactic + Technique ID badge */}
+              <span className={`px-2.5 py-1.5 rounded-lg text-[11px] font-mono font-bold border transition-colors ${
+                isLight
+                  ? 'bg-indigo-50 text-indigo-800 border-indigo-300'
+                  : 'bg-indigo-950/70 text-indigo-300 border-indigo-500/40'
+              }`}>
+                <span className="text-slate-400 font-normal">TACTIC:</span>{' '}
+                <strong className="text-indigo-400 font-extrabold">{(attackClassification as any).tacticId || 'TA0001'}</strong>
+                {' · '}
+                <strong className="font-extrabold">{attackClassification.category}</strong>
+              </span>
+
+              <span className={`px-2.5 py-1.5 rounded-lg text-[11px] font-mono font-bold border transition-colors ${
+                isLight
+                  ? 'bg-amber-50 text-amber-900 border-amber-300'
+                  : 'bg-amber-950/70 text-amber-300 border-amber-500/40'
+              }`}>
+                TARGET PORT: <strong className="font-extrabold">{targetPort}</strong> ({targetProtocol})
               </span>
             </div>
 
@@ -968,6 +1126,43 @@ const TargetDetailSection: React.FC<TargetDetailProps> = ({
       </div>
 
       <div className="py-6 space-y-6">
+        {/* Active Attack & Exploit Type Box */}
+        {(() => {
+          const detailExploit = resolveAttackClassification(
+            predictedNextTarget.predictedAttackVector,
+            predictedNextTarget.mitreTactic
+          );
+          return (
+            <div className={`p-4 sm:p-5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+              isLight
+                ? 'bg-rose-50/90 border-rose-300 text-rose-950'
+                : 'bg-rose-950/40 border-rose-600/50 text-rose-100 shadow-[0_0_15px_rgba(244,63,94,0.15)]'
+            }`}>
+              <div className="space-y-1.5">
+                <div className="flex items-center space-x-2 text-[11px] font-mono uppercase font-extrabold text-rose-600 dark:text-rose-400">
+                  <Zap className="w-4 h-4 text-rose-500 fill-current" />
+                  <span>IDENTIFIED EXPLOIT / ATTACK CLASSIFICATION:</span>
+                </div>
+                <div className="text-base sm:text-lg font-extrabold font-sans text-rose-700 dark:text-rose-200">
+                  {detailExploit.type}
+                </div>
+                <p className="text-xs font-mono text-slate-600 dark:text-slate-300">
+                  Underlying Vector: <strong className="text-rose-600 dark:text-rose-400">{predictedNextTarget.predictedAttackVector}</strong>
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:items-end gap-1.5 shrink-0">
+                <span className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold uppercase bg-rose-600 text-white shadow-xs">
+                  {detailExploit.category}
+                </span>
+                <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  Inbound Port: <strong className="text-amber-500 font-bold">{predictedNextTarget.incomingPort}</strong> ({predictedNextTarget.protocol})
+                </span>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Computer Details + Big Danger Meter */}
         <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-6 p-5 rounded-xl border ${
           isLight ? 'bg-amber-50/50 border-amber-200' : 'bg-slate-900/60 border-slate-700/60'

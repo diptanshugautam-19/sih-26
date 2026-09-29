@@ -99,27 +99,60 @@ export const MetricCards: React.FC<MetricCardsProps> = ({
         </div>
       </div>
 
-      {/* 3. Predicted stage */}
+      {/* 3. Predicted stage / Attack Type */}
       <div className={cardBaseClass}>
         <div className="flex items-start space-x-3.5">
           <div className={`p-2.5 rounded-lg border ${
             isLight
-              ? 'border-amber-200 bg-amber-50 text-amber-600'
-              : 'border-amber-500/30 bg-amber-950/30 text-amber-400'
+              ? 'border-rose-200 bg-rose-50 text-rose-600'
+              : 'border-rose-500/30 bg-rose-950/30 text-rose-400'
           }`}>
             <Target className="w-5 h-5" />
           </div>
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
               <span className={`text-xs font-mono tracking-wider uppercase ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-                Current Attack Step
+                Detected Attack Type
               </span>
             </div>
-            <div className={`text-xl sm:text-2xl font-bold font-sans ${isLight ? 'text-amber-700' : 'text-amber-300'}`}>
-              Spreading Sideways
+            <div className={`text-base sm:text-lg font-bold font-sans leading-tight ${isLight ? 'text-rose-700' : 'text-rose-300'}`}>
+              {(() => {
+                const text = `${predictedStage} ${mitreTactic}`.toLowerCase();
+                if (text.includes('kerberoast') || text.includes('t1558') || text.includes('kerberos')) {
+                  return 'Kerberoasting (T1558.003)';
+                }
+                if (text.includes('psexec') || (text.includes('smb') && text.includes('lateral')) || text.includes('t1021')) {
+                  return 'Remote Services: SMB (T1021.002)';
+                }
+                if (text.includes('eternalblue') || text.includes('doublepulsar') || text.includes('ms17-010') || text.includes('t1210')) {
+                  return 'Exploit Remote Services (T1210)';
+                }
+                if (text.includes('sql') || text.includes('t1190')) {
+                  return 'Exploit Public-Facing App (T1190)';
+                }
+                if (text.includes('modbus') || text.includes('scada') || text.includes('plc') || text.includes('t0855')) {
+                  return 'Modbus Override (T0855)';
+                }
+                if (text.includes('beacon') || text.includes('c2') || text.includes('t1071')) {
+                  return 'C2 Application Layer (T1071.001)';
+                }
+                if (text.includes('syn') || text.includes('flood') || text.includes('t1498')) {
+                  return 'Network Denial of Service (T1498)';
+                }
+                if (text.includes('exfiltration') || text.includes('t1041')) {
+                  return 'Exfiltration Over C2 (T1041)';
+                }
+                if (text.includes('scanning') || text.includes('t1595') || text.includes('recon')) {
+                  return 'Active Scanning (T1595)';
+                }
+                if (text.includes('benign') || text.includes('routine')) {
+                  return 'Benign / Routine Traffic';
+                }
+                return predictedStage || 'Active Network Infiltration';
+              })()}
             </div>
-            <p className={`text-[11px] font-sans ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
-              {mitreTactic} (jumping between internal computers)
+            <p className={`text-[11px] font-mono ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+              {mitreTactic}
             </p>
           </div>
         </div>

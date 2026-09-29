@@ -6,7 +6,8 @@ import {
   X,
   ArrowRight,
   RefreshCw,
-  Cpu
+  Cpu,
+  Download
 } from 'lucide-react';
 import { CaptureMetadata, PresetCapture, AppTheme } from '../types';
 import {
@@ -379,27 +380,44 @@ export const CaptureUploadModal: React.FC<CaptureUploadModalProps> = ({
                     <div className="text-[10px] font-mono text-slate-400">
                       Target: <span className="text-rose-600 dark:text-rose-400 font-semibold">{preset.targetFocus}</span> ({preset.probability}%)
                     </div>
-                    <button
-                      onClick={() => handleLoadPreset(preset.id)}
-                      disabled={isLoading || isProcessing}
-                      className={`flex items-center space-x-1 px-2.5 py-1 rounded text-[10px] font-mono font-semibold transition-colors ${
-                        isLight
-                          ? 'bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 hover:text-cyan-800'
-                          : 'bg-[#0a1e3f] hover:bg-cyan-950 border border-cyan-500/30 hover:border-cyan-500 text-cyan-300'
-                      }`}
-                    >
-                      {isLoading ? (
-                        <>
-                          <RefreshCw className="w-3 h-3 animate-spin" />
-                          <span>Loading...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Load Capture</span>
-                          <ArrowRight className="w-3 h-3" />
-                        </>
-                      )}
-                    </button>
+                    <div className="flex items-center space-x-1.5">
+                      <a
+                        href={`/api/captures/download/${preset.fileName}`}
+                        download={preset.fileName}
+                        onClick={(e) => e.stopPropagation()}
+                        title={`Download ${preset.fileName}`}
+                        className={`flex items-center space-x-1 px-2 py-1 rounded text-[10px] font-mono font-semibold transition-colors ${
+                          isLight
+                            ? 'bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700'
+                            : 'bg-[#0a1e3f] hover:bg-[#122c54] border border-cyan-500/30 text-cyan-300'
+                        }`}
+                      >
+                        <Download className="w-3 h-3 text-cyan-500" />
+                        <span>Download</span>
+                      </a>
+
+                      <button
+                        onClick={() => handleLoadPreset(preset.id)}
+                        disabled={isLoading || isProcessing}
+                        className={`flex items-center space-x-1 px-2.5 py-1 rounded text-[10px] font-mono font-semibold transition-colors ${
+                          isLight
+                            ? 'bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 hover:text-cyan-800'
+                            : 'bg-[#0a1e3f] hover:bg-cyan-950 border border-cyan-500/30 hover:border-cyan-500 text-cyan-300'
+                        }`}
+                      >
+                        {isLoading ? (
+                          <>
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                            <span>Loading...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Load</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
