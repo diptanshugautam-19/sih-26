@@ -7,7 +7,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.1%2B-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![React](https://img.shields.io/badge/Frontend-React%2019%20%7C%20Vite%20%7C%20TypeScript-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![MITRE ATT&CK](https://img.shields.io/badge/Taxonomy-MITRE%20ATT%26CK%20v14-red)](https://attack.mitre.org/)
-[![Deployment](https://img.shields.io/badge/Deployment-Air--Gapped%20%7C%20Offline%20Ready-00C853)](https://github.com/diptanshugautam-19/sih-27)
+[![Deployment](https://img.shields.io/badge/Deployment-Air--Gapped%20%7C%20Offline%20Ready-00C853)](https://github.com/diptanshugautam-19/sih-26)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 *A proactive, forward-simulating AI World Model combining Spatial Graph Attention Networks (GAT), Persistent Temporal Node Memory (TGN), and Causal Sequence Transformers to predict multi-stage network compromise $K$-steps ahead before host takeover or data exfiltration occurs.*
@@ -129,8 +129,21 @@ The model outputs official Enterprise MITRE ATT&CK tactics, techniques, and sub-
 - **Python:** `3.10` or `3.11`
 - **Node.js:** `18.0.0+` & `npm`
 - **Operating System:** Windows, Linux, or macOS
+- **Docker (Optional):** Docker Desktop or Docker Engine with Docker Compose
 
-### 1-Click Launch (Recommended)
+---
+
+### Option A: 🐳 Docker 1-Command Startup (Zero Setup Required)
+
+If you have Docker installed, simply run:
+```bash
+docker compose up
+```
+Open **`http://localhost:3000`** in your browser. All neural networks, PyTorch, Node.js, and dependencies run in an isolated container.
+
+---
+
+### Option B: ⚡ 1-Click Native Launcher
 
 #### On Windows:
 Double-click [`run.bat`](run.bat) or run in terminal:
@@ -146,12 +159,12 @@ chmod +x run.sh
 
 ---
 
-### Manual Step-by-Step Setup
+### Option C: 🛠️ Manual Installation & Verification
 
 #### Step 1: Clone Repository
 ```bash
-git clone https://github.com/diptanshugautam-19/sih-27.git
-cd sih-27
+git clone https://github.com/diptanshugautam-19/sih-26.git
+cd sih-26
 ```
 
 #### Step 2: Set Up Python Virtual Environment & Dependencies
@@ -167,24 +180,31 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-#### Step 3: Install Frontend Dependencies
+#### Step 3: Run Environment Health Diagnostic
+Verify your PyTorch device (CUDA/CPU), packet engines, and neural model integrity:
+```bash
+python scripts/verify_env.py
+```
+*Expected output: `[SUCCESS] All core dependencies, packages, and neural components are verified!`*
+
+#### Step 4: Install Frontend Dependencies
 ```bash
 cd frontend
 npm install
 cd ..
 ```
 
-#### Step 4: Run the Application Stack
+#### Step 5: Start the Full Stack
 
-You can run the full stack using `npm run dev` in `frontend/`, which hosts both the API and UI:
+Run the integrated dev server:
 ```bash
 cd frontend
 npm run dev
 ```
 
-Or run them independently:
+Or run frontend and backend independently:
 ```bash
-# Terminal 1: FastAPI Neural Backend
+# Terminal 1: FastAPI Neural World Model Server
 python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 
 # Terminal 2: React Dashboard
@@ -193,6 +213,20 @@ npm run dev
 ```
 
 Open your browser to: **`http://localhost:3000`**
+
+---
+
+### ⏱️ 60-Second Instant Test Walkthrough
+
+Want to see the system in action immediately?
+1. Open the dashboard at `http://localhost:3000`. You will see the **Upload Gate** (ensuring strict zero-demo, real-data evaluation).
+2. Generate the enterprise multi-stage attack test PCAP (if not already generated):
+   ```bash
+   python scripts/generate_enterprise_attack_200mb.py
+   ```
+3. Drag and drop `data/pcaps_sample/enterprise_multi_stage_apt_attack_200mb.pcap` directly into the web UI upload modal.
+4. Watch the World Model parse the capture, roll out $K=4$ future graph horizons, map the attack to **Lateral Movement (`TA0008`)**, highlight malicious SMB (`:445`) edges with glowing attention weights ($\alpha > 0.9$), and project **+22.5s advance lead time**.
+5. Click **"Simulate Host Isolation"** in the Counterfactual Action Center to observe real-time simulated risk reduction.
 
 ---
 
@@ -389,9 +423,56 @@ All 15 test suites verify:
 
 ---
 
+---
+
+## ❓ Frequently Asked Questions & Troubleshooting
+
+<details>
+<summary><b>1. Port 3000 or 8000 is already in use</b></summary>
+
+You can customize the ports by setting environment variables in your terminal or in `.env`:
+```bash
+# On Linux / macOS:
+PORT=3001 BACKEND_PORT=8001 npm run dev
+
+# On Windows (cmd):
+set PORT=3001 && set BACKEND_PORT=8001 && npm run dev
+```
+</details>
+
+<details>
+<summary><b>2. PyTorch CUDA GPU vs CPU Detection</b></summary>
+
+The system automatically detects whether an NVIDIA GPU is available (`torch.cuda.is_available()`). If no GPU is present, it seamlessly falls back to CPU execution with optimized tensor batching. You can verify device placement at any time with:
+```bash
+python scripts/verify_env.py
+```
+</details>
+
+<details>
+<summary><b>3. Windows PowerShell Execution Policy Error when running npm</b></summary>
+
+If PowerShell blocks running `npm` or script activation:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+Or simply use `cmd.exe` or double-click [`run.bat`](run.bat).
+</details>
+
+<details>
+<summary><b>4. Analyzing Large PCAP Files (> 200MB)</b></summary>
+
+The web dashboard uses chunked binary streaming to prevent browser memory exhaustion. For extremely massive packet captures (gigabyte-scale), it is recommended to run the offline CLI engine:
+```bash
+python scripts/infer_pcap.py --pcap /path/to/large_capture.pcap
+```
+</details>
+
+---
+
 ## 📄 License & Attribution
 
-Distributed under the **MIT License**. See `LICENSE` for details.
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.
 
 Developed for proactive cyber defense, Critical Information Infrastructure protection, and advance network threat forecasting. If you use this software in research or operational deployments, please cite:
 
@@ -400,7 +481,7 @@ Developed for proactive cyber defense, Critical Information Infrastructure prote
   title   = {Predictive Cyber Defence World Model: Forward-Simulating Network Infiltration Trajectories with Graph Attention and Causal Transformers},
   author  = {Predictive Cyber Defence Research Group},
   year    = {2026},
-  url     = {https://github.com/diptanshugautam-19/sih-27}
+  url     = {https://github.com/diptanshugautam-19/sih-26}
 }
 ```
 

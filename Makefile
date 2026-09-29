@@ -1,11 +1,13 @@
-.PHONY: help install dev dev-backend dev-frontend test lint clean generate-data infer-sample
+.PHONY: help install verify dev dev-backend dev-frontend test docker-build docker-up lint clean generate-data infer-sample
 
 help:
-	@echo "Available commands:"
+	@echo "Predictive Cyber Defence World Model - Developer Commands"
 	@echo "  make install        Install Python dependencies and Frontend node modules"
-	@echo "  make dev            Run both backend API and frontend UI concurrently"
+	@echo "  make verify         Run comprehensive environment & model diagnostic"
+	@echo "  make dev            Run frontend UI and API server concurrently"
 	@echo "  make dev-backend    Start FastAPI backend server on port 8000"
 	@echo "  make dev-frontend   Start Vite/React frontend dashboard on port 3000"
+	@echo "  make docker-up      Start containerized stack with Docker Compose"
 	@echo "  make test           Run test suite with pytest"
 	@echo "  make generate-data  Generate synthetic multi-stage enterprise attack PCAP"
 	@echo "  make infer-sample   Run PCAP inference on generated sample"
@@ -15,11 +17,23 @@ install:
 	python -m pip install -r requirements.txt
 	cd frontend && npm install
 
+verify:
+	python scripts/verify_env.py
+
+dev:
+	cd frontend && npm run dev
+
 dev-backend:
 	python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 
 dev-frontend:
 	cd frontend && npm run dev
+
+docker-build:
+	docker compose build
+
+docker-up:
+	docker compose up
 
 test:
 	pytest tests/ -v
