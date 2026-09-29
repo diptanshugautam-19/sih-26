@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cyber-defence-world-model"
+version = "1.0.0"
+description = "AI World Model for Proactive Cyber Defence: Network Infiltration Trajectory Forecasting & Counterfactual Simulation"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Predictive Cyber Defence Research Team"}
+]
+keywords = [
+    "cybersecurity",
+    "world-models",
+    "graph-neural-networks",
+    "temporal-transformers",
+    "mitre-attack",
+    "intrusion-detection",
+    "counterfactual-reasoning",
+    "proactive-defence"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Information Technology",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "torch>=2.1.0",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "scikit-learn>=1.3.0",
+    "scapy>=2.5.0",
+    "dpkt>=1.9.8",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.22.0",
+    "networkx>=3.0",
+    "pyyaml>=6.0",
+    "tqdm>=4.65.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0"
+]
+viz = [
+    "plotly>=5.15.0",
+    "streamlit>=1.25.0",
+    "pyvis>=0.3.2"
+]
